@@ -5,6 +5,6 @@ del hutao_seh_stub.obj
 
 cd C:\Users\rukkh\hutao-minhook-ng
 $env:RUSTFLAGS="-Lnative=src"
-cargo clippy
+cargo clippy --fix --allow-dirty --allow-staged
 cargo fmt
 cargo build --release

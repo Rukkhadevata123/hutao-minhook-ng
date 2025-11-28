@@ -3,7 +3,7 @@ use std::mem::MaybeUninit;
 
 const MS_SUCCEEDED: u32 = 0x0;
 
-// Simplified exception information structure - only essential info
+// Simplified exception information structure
 #[repr(C)]
 pub struct Exception {
     pub code: u32,
