@@ -22,5 +22,5 @@ panic = "abort"
 lto = true
 
 [lib]
-name = "hutao_minhoo_ng"
+name = "hutao_minhook_ng"
 crate-type = ["cdylib"]
