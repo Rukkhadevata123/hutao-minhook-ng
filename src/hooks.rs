@@ -342,8 +342,7 @@ pub fn init_hooks() -> bool {
     }
 
     // 3. Set_FrameCount (No Hook, just store address)
-    let mut set_frame_count_addr =
-        scan("E8 ? ? ? ? E8 ? ? ? ? 83 F8 1F 0F 9C 05 ? ? ? ? 48 8B 05");
+    let mut set_frame_count_addr = scan("E8 ? ? ? ? E8 ? ? ? ? 83 F8 1F 0F 9C 05 ? ? ? ? 48 8B 05");
     set_frame_count_addr = resolve_relative_address(set_frame_count_addr, 1, 5);
     set_frame_count_addr = resolve_relative_address(set_frame_count_addr, 1, 5);
     if !set_frame_count_addr.is_null() {
@@ -420,9 +419,8 @@ pub fn init_hooks() -> bool {
         OPEN_TEAM_PAGE_ACCORDINGLY.store(open_team_page_addr, Ordering::Relaxed);
     }
 
-    let open_team_addr = scan(
-        "48 83 ec 28 80 3d ? ? ? ? 00 75 78 48 8b 0d ? ? ? ? 80 b9 ? ? ? ? 00 0f 84",
-    );
+    let open_team_addr =
+        scan("48 83 ec 28 80 3d ? ? ? ? 00 75 78 48 8b 0d ? ? ? ? 80 b9 ? ? ? ? 00 0f 84");
     if !open_team_addr.is_null()
         && let Ok(trampoline) = create_hook(open_team_addr, hook_open_team as *mut c_void)
     {
