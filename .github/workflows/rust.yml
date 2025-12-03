@@ -21,3 +21,11 @@ jobs:
       
       - name: Build
         run: cargo build --verbose --release
+
+      - name: Upload specific DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: hutao-minhook-dll
+          path: target/release/hutao_minhook_ng.dll
+          retention-days: 30
+          if-no-files-found: error
