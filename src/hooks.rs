@@ -50,7 +50,6 @@ static OPEN_TEAM_PAGE_ACCORDINGLY: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_
 static ORIGINAL_OPEN_TEAM: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 
 // Global State
-static IS_LOW_FOV: AtomicBool = AtomicBool::new(false);
 static GAME_UPDATE_INIT: AtomicBool = AtomicBool::new(false);
 
 // =============================================================================================
@@ -155,25 +154,8 @@ unsafe extern "system" fn hook_change_fov(a1: *mut c_void, mut change_fov_value:
     unsafe {
         let config = get_config();
 
-        // Re-apply FPS override here as well (from original logic)
-        if config.enable_fps_override {
-            let set_frame_count_ptr = ORIGINAL_SET_FRAME_COUNT.load(Ordering::Relaxed);
-            if !set_frame_count_ptr.is_null() {
-                let set_frame_count: SetFrameCountFn = std::mem::transmute(set_frame_count_ptr);
-                set_frame_count(config.selected_fps);
-            }
-        }
-
-        if change_fov_value <= 30.0 {
-            IS_LOW_FOV.store(true, Ordering::Relaxed);
-            if config.enable_fix_low_fov {
-                change_fov_value = config.fov_value;
-            }
-        } else {
-            IS_LOW_FOV.store(false, Ordering::Relaxed);
-            if config.enable_fov_override {
-                change_fov_value = config.fov_value;
-            }
+        if change_fov_value > 30.0 && config.enable_fov_override {
+            change_fov_value = config.fov_value;
         }
 
         let original_ptr = ORIGINAL_CHANGE_FOV.load(Ordering::Relaxed);
@@ -194,9 +176,8 @@ static mut FAKE_FOG_STRUCT: FakeFogStruct = FakeFogStruct([0; 64]);
 unsafe extern "system" fn hook_display_fog(a1: *mut c_void, a2: *mut c_void) -> i32 {
     unsafe {
         let config = get_config();
-        let is_low_fov = IS_LOW_FOV.load(Ordering::Relaxed);
 
-        let should_disable_fog = is_low_fov || config.enable_display_fog_override;
+        let should_disable_fog = config.enable_display_fog_override;
 
         if should_disable_fog && !a2.is_null() {
             // Use addr_of_mut to get a stable pointer to FAKE_FOG_STRUCT
