@@ -25,7 +25,7 @@ jobs:
       - name: Upload specific DLL
         uses: actions/upload-artifact@v4
         with:
-          name: hutao-minhook-dll
+          name: hutao_minhook_ng.dll
           path: target/release/hutao_minhook_ng.dll
           retention-days: 30
           if-no-files-found: error
