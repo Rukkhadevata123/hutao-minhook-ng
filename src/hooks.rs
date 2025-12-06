@@ -27,8 +27,6 @@ pub struct Il2CppString {
 // Global Function Pointers (Originals & Helpers)
 // =============================================================================================
 
-// GameUpdate
-static ORIGINAL_GAME_UPDATE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 // Get_FrameCount
 static ORIGINAL_GET_FRAME_COUNT: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 // Set_FrameCount (Not hooked, just called)
@@ -56,9 +54,6 @@ static GAME_UPDATE_INIT: AtomicBool = AtomicBool::new(false);
 // =============================================================================================
 // Function Type Definitions
 // =============================================================================================
-
-// typedef int(*GameUpdate_t)(__int64 a1, const char* a2);
-type GameUpdateFn = unsafe extern "system" fn(*mut c_void, *const c_char) -> i32;
 
 // typedef int(*HookGet_FrameCount_t)();
 type GetFrameCountFn = unsafe extern "system" fn() -> i32;
@@ -105,31 +100,6 @@ type OpenTeamPageAccordinglyFn = unsafe extern "system" fn(bool);
 // Hook Implementations
 // =============================================================================================
 
-unsafe extern "system" fn hook_game_update(a1: *mut c_void, a2: *const c_char) -> i32 {
-    unsafe {
-        if !GAME_UPDATE_INIT.load(Ordering::Relaxed) {
-            GAME_UPDATE_INIT.store(true, Ordering::Relaxed);
-        }
-
-        let config = get_config();
-        if config.enable_fps_override {
-            let set_frame_count_ptr = ORIGINAL_SET_FRAME_COUNT.load(Ordering::Relaxed);
-            if !set_frame_count_ptr.is_null() {
-                let set_frame_count: SetFrameCountFn = std::mem::transmute(set_frame_count_ptr);
-                set_frame_count(config.selected_fps);
-            }
-        }
-
-        let original_ptr = ORIGINAL_GAME_UPDATE.load(Ordering::Relaxed);
-        if !original_ptr.is_null() {
-            let original: GameUpdateFn = std::mem::transmute(original_ptr);
-            original(a1, a2)
-        } else {
-            0
-        }
-    }
-}
-
 unsafe extern "system" fn hook_get_frame_count() -> i32 {
     unsafe {
         let original_ptr = ORIGINAL_GET_FRAME_COUNT.load(Ordering::Relaxed);
@@ -151,9 +121,24 @@ unsafe extern "system" fn hook_get_frame_count() -> i32 {
     }
 }
 
-unsafe extern "system" fn hook_change_fov(a1: *mut c_void, mut change_fov_value: f32) -> i32 {
+unsafe extern "system" fn hook_change_fps_and_fov(
+    a1: *mut c_void,
+    mut change_fov_value: f32,
+) -> i32 {
     unsafe {
+        if !GAME_UPDATE_INIT.load(Ordering::Relaxed) {
+            GAME_UPDATE_INIT.store(true, Ordering::Relaxed);
+        }
+
         let config = get_config();
+
+        if config.enable_fps_override {
+            let set_frame_count_ptr = ORIGINAL_SET_FRAME_COUNT.load(Ordering::Relaxed);
+            if !set_frame_count_ptr.is_null() {
+                let set_frame_count: SetFrameCountFn = std::mem::transmute(set_frame_count_ptr);
+                set_frame_count(config.selected_fps);
+            }
+        }
 
         if change_fov_value > 30.0 && config.enable_fov_override {
             change_fov_value = config.fov_value;
@@ -305,15 +290,6 @@ pub fn init_hooks() -> bool {
     // New: Add base address
     let base = unsafe { GetModuleHandleW(ptr::null()) } as usize;
 
-    // 1. GameUpdate
-    let game_update_addr = scan("E8 ? ? ? ? 48 8D 4C 24 ? 8B F8 FF 15 ? ? ? ? E8");
-    let game_update_addr = resolve_relative_address(game_update_addr, 1, 5);
-    if !game_update_addr.is_null()
-        && let Ok(trampoline) = create_hook(game_update_addr, hook_game_update as *mut c_void)
-    {
-        ORIGINAL_GAME_UPDATE.store(trampoline, Ordering::Relaxed);
-    }
-
     // 2. Get_FrameCount
     let mut get_frame_count_addr =
         scan("E8 ? ? ? ? 85 C0 7E 0E E8 ? ? ? ? 0F 57 C0 F3 0F 2A C0 EB 08");
@@ -339,7 +315,7 @@ pub fn init_hooks() -> bool {
         "40 53 48 83 EC 60 0F 29 74 24 ? 48 8B D9 0F 28 F1 E8 ? ? ? ? 48 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 48 8B C8 ",
     );
     if !change_fov_addr.is_null()
-        && let Ok(trampoline) = create_hook(change_fov_addr, hook_change_fov as *mut c_void)
+        && let Ok(trampoline) = create_hook(change_fov_addr, hook_change_fps_and_fov as *mut c_void)
     {
         ORIGINAL_CHANGE_FOV.store(trampoline, Ordering::Relaxed);
     }
