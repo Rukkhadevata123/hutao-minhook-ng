@@ -223,6 +223,6 @@ macro_rules! scan_key {
         let $name = $crate::scanner::get_or_scan(stringify!($name), $pattern, 0);
     };
     ($name:ident, $pattern:expr, $resolve:expr) => {
-        let $name = crate::scanner::get_or_scan(stringify!($name), $pattern, $resolve);
+        let $name = $crate::scanner::get_or_scan(stringify!($name), $pattern, $resolve);
     };
 }
