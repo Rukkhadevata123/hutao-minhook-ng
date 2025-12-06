@@ -288,7 +288,7 @@ pub fn init_hooks() -> bool {
     // 1. Get_FrameCount
     scan_key!(
         get_frame_count_addr,
-        "E8 ? ? ? ? 85 C0 7E 0E E8 ? ? ? ? 0F 57 C0 F3 0F 2A C0 EB 08",
+        "E8 ? ? ? ? 85 C0 7E ? E8 ? ? ? ? 0F 57 C0",
         1
     );
     if !get_frame_count_addr.is_null()
@@ -301,7 +301,7 @@ pub fn init_hooks() -> bool {
     // 2. Set_FrameCount (No Hook, just store address)
     scan_key!(
         set_frame_count_addr,
-        "E8 ? ? ? ? E8 ? ? ? ? 83 F8 1F 0F 9C 05 ? ? ? ? 48 8B 05",
+        "E8 ? ? ? ? E8 ? ? ? ? 83 F8 ? 0F 9C 05",
         1
     );
     if !set_frame_count_addr.is_null() {
@@ -311,7 +311,7 @@ pub fn init_hooks() -> bool {
     // 3. ChangeFOV
     scan_key!(
         change_fov_addr,
-        "40 53 48 83 EC 60 0F 29 74 24 ? 48 8B D9 0F 28 F1 E8 ? ? ? ? 48 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 48 8B C8 "
+        "40 53 48 83 EC ? 0F 29 74 24 ? 48 8B D9 0F 28 F1 E8 ? ? ? ? 48 85 C0"
     );
     if !change_fov_addr.is_null()
         && let Ok(trampoline) = create_hook(change_fov_addr, hook_change_fps_and_fov as *mut c_void)
@@ -322,7 +322,7 @@ pub fn init_hooks() -> bool {
     // 4. DisplayFog
     scan_key!(
         display_fog_addr,
-        "0F B6 02 88 01 8B 42 04 89 41 04 F3 0F 10 52 ? F3 0F 10 4A ? F3 0F 10 42 ? 8B 42 08 "
+        "? ? ? ? ? 8B 42 ? 89 41 ? F3 0F 10 52 ? F3 0F 10 4A ? F3 0F 10 42 ? 8B 42 ? F3 0F 11 41 ? F3 0F 11 49 ? F3 0F 11 51 ? 89 41 ? 8B 42 ? 89 41 ? 8B 42 ? 89 41 ? 8B 42 ? 89 41 ? F3 0F 10 52"
     );
     if !display_fog_addr.is_null()
         && let Ok(trampoline) = create_hook(display_fog_addr, hook_display_fog as *mut c_void)
@@ -333,7 +333,7 @@ pub fn init_hooks() -> bool {
     // 5. Player_Perspective
     scan_key!(
         player_perspective_addr,
-        "E8 ? ? ? ? 48 8B BE ? ? ? ? 80 3D ? ? ? ? ? 0F 85 ? ? ? ? 80 BE ? ? ? ? ? 74 11",
+        "E8 ? ? ? ? 48 8B BE ? ? ? ? 80 3D ? ? ? ? 00 0F 85 ? ? ? ? 80 BE ? ? ? ? 00 74 ? 48 8B 86",
         1
     );
     if !player_perspective_addr.is_null()
@@ -346,9 +346,14 @@ pub fn init_hooks() -> bool {
     }
 
     // 6. Craft Redirect
+    // Warning: The pattern may cross function boundaries, so we may not want to use.
+    // scan_key!(
+    //     find_string_addr,
+    //     "56 48 83 EC ? 48 89 CE E8 ? ? ? ? 48 89 F1 89 C2 48 83 C4 ? 5E E9 ? ? ? ? ? ? ? ? 55 56 57 53"
+    // );
     scan_key!(
         find_string_addr,
-        "56 48 83 ec 20 48 89 ce e8 ? ? ? ? 48 89 f1 89 c2 48 83 c4 20 5e e9 ? ? ? ? cc cc cc cc"
+        "56 48 83 EC ? 48 89 CE E8 ? ? ? ? 48 89 F1 89 C2 48 83 C4 ? 5E E9 ? ? ? ? CC"
     );
     if !find_string_addr.is_null() {
         FIND_STRING.store(find_string_addr, Ordering::Relaxed);
@@ -356,7 +361,7 @@ pub fn init_hooks() -> bool {
 
     scan_key!(
         craft_entry_partner_addr,
-        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 ec ? ? ? ? 4d 89 cd 4c 89 c6 49 89 d4 49 89 ce 4c 8b bc 24"
+        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 4D 89 CD 4C 89 C6 49 89 D4 49 89 CE"
     );
     if !craft_entry_partner_addr.is_null() {
         CRAFT_ENTRY_PARTNER.store(craft_entry_partner_addr, Ordering::Relaxed);
@@ -364,7 +369,7 @@ pub fn init_hooks() -> bool {
 
     scan_key!(
         craft_entry_addr,
-        "41 56 56 57 53 48 83 EC 58 49 89 CE 80 3D ? ? ? ? 00 0F 84 ? ? ? ? 80 3D ? ? ? ? 00 48 8B 0D ? ? ? ? 0F 85"
+        "41 56 56 57 53 48 83 EC ? 49 89 CE 80 3D ? ? ? ? 00 0F 84 ? ? ? ? 80 3D ? ? ? ? 00 48 8B 0D ? ? ? ? 0F 85 ? ? ? ? 48 8B 81 ? ? ? ? 48 85 C0 0F 84 ? ? ? ? 80 3D ? ? ? ? 00"
     );
     if !craft_entry_addr.is_null()
         && let Ok(trampoline) = create_hook(craft_entry_addr, hook_craft_entry as *mut c_void)
@@ -375,7 +380,7 @@ pub fn init_hooks() -> bool {
     // 7. Team Anime
     scan_key!(
         check_can_enter_addr,
-        "56 48 81 ec 80 00 00 00 80 3d ? ? ? ? 00 0f 84 ? ? ? ? 80 3d ? ? ? ? 00"
+        "56 48 81 EC ? ? ? ? 80 3D ? ? ? ? 00 0F 84 ? ? ? ? 80 3D ? ? ? ? 00 48 8B 0D"
     );
     if !check_can_enter_addr.is_null() {
         CHECK_CAN_ENTER.store(check_can_enter_addr, Ordering::Relaxed);
@@ -383,7 +388,7 @@ pub fn init_hooks() -> bool {
 
     scan_key!(
         open_team_page_addr,
-        "56 57 53 48 83 ec 20 89 cb 80 3d ? ? ? ? 00 74 7a 80 3d ? ? ? ? 00 48 8b 05"
+        "56 57 53 48 83 EC ? 89 CB 80 3D ? ? ? ? 00 74 ? 80 3D ? ? ? ? 00"
     );
     if !open_team_page_addr.is_null() {
         OPEN_TEAM_PAGE_ACCORDINGLY.store(open_team_page_addr, Ordering::Relaxed);
@@ -391,7 +396,7 @@ pub fn init_hooks() -> bool {
 
     scan_key!(
         open_team_addr,
-        "48 83 EC ? 80 3D ? ? ? ? 00 75 ? 48 8B 0D ? ? ? ? 80 B9 ? ? ? ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 84 C0 ? ? 48 83 C4 ? C3 48 8B 05 ? ? ? ? 48 8B 80 ? ? ? ? 48 8B 88 ? ? ? ? 48 85 C9 0F 84 ? ? ? ? 48 83 C4 ? E9 ? ? ? ? E8 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 84 C0 75 ? 48 8B 05"
+        "48 83 EC ? 80 3D ? ? ? ? 00 75 ? 48 8B 0D ? ? ? ? 80 B9 ? ? ? ? 00 74 ? B9 ? ? ? ? E8 ? ? ? ? 84 C0 74 ? 48 83 C4 ? C3 48 8B 05 ? ? ? ? 48 8B 80 ? ? ? ? 48 8B 88 ? ? ? ? 48 85 C9 0F 84 ? ? ? ? 48 83 C4 ? E9 ? ? ? ? E8 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 84 C0 75 ? 48 8B 05"
     );
     if !open_team_addr.is_null()
         && let Ok(trampoline) = create_hook(open_team_addr, hook_open_team as *mut c_void)
