@@ -18,7 +18,6 @@ pub struct Config {
     // Visuals
     pub enable_display_fog_override: bool,
     pub enable_perspective_override: bool,
-    pub enable_fix_low_fov: bool,
 
     // Features
     pub enable_redirect_craft_override: bool,
@@ -37,7 +36,6 @@ impl Default for Config {
             fov_value: 60.0,
             enable_display_fog_override: false,
             enable_perspective_override: false,
-            enable_fix_low_fov: false,
             enable_redirect_craft_override: false,
             enable_remove_team_anim: false,
             toggle_key: VK_HOME as i32,
@@ -140,13 +138,6 @@ pub fn load_config() {
         new_config.enable_perspective_override = GetPrivateProfileIntW(
             section_visuals.as_ptr(),
             to_wstring("RemoveBlur").as_ptr(),
-            0,
-            path_ptr,
-        ) != 0;
-
-        new_config.enable_fix_low_fov = GetPrivateProfileIntW(
-            section_visuals.as_ptr(),
-            to_wstring("FixLowFOV").as_ptr(),
             0,
             path_ptr,
         ) != 0;
