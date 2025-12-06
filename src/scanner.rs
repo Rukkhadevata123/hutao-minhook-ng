@@ -1,4 +1,5 @@
 use crate::hutao_seh::try_seh;
+use std::collections::HashSet;
 use std::ffi::c_void;
 use std::ptr;
 use windows_sys::Win32::System::Memory::*;
@@ -36,7 +37,7 @@ fn get_memory_regions() -> Vec<RegionInfo> {
             if VirtualQuery(
                 start as *const c_void,
                 &mut mbi,
-                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                size_of::<MEMORY_BASIC_INFORMATION>(),
             ) == 0
             {
                 break;
@@ -77,14 +78,15 @@ fn scan_region(
     region_base: *mut c_void,
     region_size: usize,
     pattern: &[Option<u8>],
-) -> Option<*mut c_void> {
+) -> Vec<*mut c_void> {
     let pattern_len = pattern.len();
     if region_size < pattern_len {
-        return None;
+        return Vec::new();
     }
 
     // Use try_seh to catch Access Violations during memory read
     let result = try_seh(|| unsafe {
+        let mut results: Vec<*mut c_void> = Vec::new();
         let base = region_base as *const u8;
         let end = region_size - pattern_len;
 
@@ -99,32 +101,86 @@ fn scan_region(
                 }
             }
             if found {
-                return Some(base.add(i) as *mut c_void);
+                results.push(base.add(i) as *mut c_void);
             }
         }
-        None
+        results
     });
 
-    match result {
-        Ok(Some(addr)) => Some(addr),
-        Ok(None) => None,
-        Err(_) => {
-            // Access Violation occurred in this region, skip it
-            None
-        }
-    }
+    result.unwrap_or_else(|_| {
+        // Access Violation occurred in this region, skip it
+        Vec::new()
+    })
 }
 
-/// Main entry point for pattern scanning.
-/// Scans all valid memory regions for the given pattern string.
-pub fn scan(pattern: &str) -> *mut c_void {
+/// Scans all valid memory regions for the given pattern string up to `limit` matches.
+/// Returns a Vec of found addresses (maybe empty).
+pub fn scan_limit(pattern: &str, limit: usize) -> Vec<*mut c_void> {
     let parsed_pattern = parse_pattern(pattern);
     let regions = get_memory_regions();
 
+    let mut all = Vec::new();
     for region in regions {
-        if let Some(addr) = scan_region(region.base, region.size, &parsed_pattern) {
-            return addr;
+        let mut found = scan_region(region.base, region.size, &parsed_pattern);
+        for addr in found.drain(..) {
+            all.push(addr);
+            if all.len() >= limit {
+                return all;
+            }
         }
+    }
+    all
+}
+
+/// Helper that tries to read offsets from config first (key under [Offsets]).
+/// If none present, scans for all matches of `pattern`, resolves relative
+/// addresses `resolve_times` times (0 = no resolve), writes found offsets
+/// back to config (comma-separated hex) and returns the first found address
+/// or null if none.
+pub fn get_or_scan(key: &str, pattern: &str, resolve_times: u8) -> *mut c_void {
+    // Try read from config first
+    let cfg_addrs = crate::config::load_offsets(key);
+    if !cfg_addrs.is_empty() {
+        return cfg_addrs[0] as *mut c_void;
+    }
+
+    // Scan for matches but limit to 10 to avoid floods
+    let matches = scan_limit(pattern, 10);
+    let mut resolved_vec: Vec<usize> = Vec::new();
+    let mut seen: HashSet<usize> = HashSet::new();
+
+    for m in matches.iter() {
+        let mut addr = *m;
+        if addr.is_null() {
+            continue;
+        }
+
+        // Resolve relative addresses requested times
+        for _ in 0..resolve_times {
+            addr = resolve_relative_address(addr, 1, 5);
+            if addr.is_null() {
+                break;
+            }
+        }
+        if addr.is_null() {
+            continue;
+        }
+
+        let addr_usize = addr as usize;
+        if !seen.insert(addr_usize) {
+            continue; // skip duplicates
+        }
+
+        resolved_vec.push(addr_usize);
+        if resolved_vec.len() >= 10 {
+            break;
+        }
+    }
+
+    if !resolved_vec.is_empty() {
+        // Persist found offsets to config so next run uses them
+        let _ = crate::config::write_offsets(key, &resolved_vec);
+        return resolved_vec[0] as *mut c_void;
     }
 
     ptr::null_mut()
@@ -158,4 +214,15 @@ pub fn resolve_relative_address(
 
         target_addr as *mut c_void
     }
+}
+
+/// Macro to declare a let-bound scanner variable using the variable name as the config key.
+#[macro_export]
+macro_rules! scan_key {
+    ($name:ident, $pattern:expr) => {
+        let $name = $crate::scanner::get_or_scan(stringify!($name), $pattern, 0);
+    };
+    ($name:ident, $pattern:expr, $resolve:expr) => {
+        let $name = crate::scanner::get_or_scan(stringify!($name), $pattern, $resolve);
+    };
 }

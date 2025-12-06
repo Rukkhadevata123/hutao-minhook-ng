@@ -1,9 +1,10 @@
 use std::path::PathBuf;
+use std::ptr;
 use std::sync::{OnceLock, RwLock};
 use windows_sys::Win32::Foundation::{HMODULE, MAX_PATH};
-use windows_sys::Win32::System::LibraryLoader::GetModuleFileNameW;
+use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 use windows_sys::Win32::System::WindowsProgramming::{
-    GetPrivateProfileIntW, GetPrivateProfileStringW,
+    GetPrivateProfileIntW, GetPrivateProfileStringW, WritePrivateProfileStringW,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_HOME;
 
@@ -103,7 +104,7 @@ pub fn load_config() {
             to_wstring("TargetFPS").as_ptr(),
             60,
             path_ptr,
-        ) as i32;
+        );
 
         new_config.enable_fov_override = GetPrivateProfileIntW(
             section_settings.as_ptr(),
@@ -163,7 +164,7 @@ pub fn load_config() {
             to_wstring("ToggleKey").as_ptr(),
             VK_HOME as i32,
             path_ptr,
-        ) as i32;
+        );
     }
 
     // Update the global config
@@ -180,4 +181,80 @@ pub fn get_config() -> Config {
         .read()
         .map(|guard| guard.clone())
         .unwrap_or_default()
+}
+
+/// Reads a comma-separated list of hex addresses from the [Offsets] section for `key`.
+/// Returns a Vec<usize> of parsed absolute addresses (empty if none or on error).
+/// Values in INI are stored relative to module base (so they stay valid across ASLR).
+pub fn load_offsets(key: &str) -> Vec<usize> {
+    let path_ptr = match CONFIG_PATH.get() {
+        Some(p) => p.as_ptr(),
+        None => return Vec::new(),
+    };
+
+    let mut buf: Vec<u16> = vec![0u16; 1024];
+
+    unsafe {
+        let section = to_wstring("Offsets");
+        let key_w = to_wstring(key);
+        let default = to_wstring("");
+
+        let len = GetPrivateProfileStringW(
+            section.as_ptr(),
+            key_w.as_ptr(),
+            default.as_ptr(),
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            path_ptr,
+        );
+
+        if len == 0 {
+            return Vec::new();
+        }
+
+        let s = String::from_utf16_lossy(&buf[..len as usize]);
+        let base = GetModuleHandleW(ptr::null()) as usize;
+
+        s.split(',')
+            .filter_map(|part| {
+                let t = part.trim();
+                if t.is_empty() {
+                    return None;
+                }
+                let t = t.trim_start_matches("0x").trim_start_matches("0X");
+                usize::from_str_radix(t, 16)
+                    .ok()
+                    .map(|rel| base.wrapping_add(rel))
+            })
+            .collect()
+    }
+}
+
+/// Writes a comma-separated list of hex addresses into the [Offsets] section under `key`.
+/// Returns true on success.
+/// Addresses are written relative to the module base (stable across ASLR).
+pub fn write_offsets(key: &str, addrs: &[usize]) -> bool {
+    let path_ptr = match CONFIG_PATH.get() {
+        Some(p) => p.as_ptr(),
+        None => return false,
+    };
+
+    let base = unsafe { GetModuleHandleW(ptr::null()) } as usize;
+
+    let joined = addrs
+        .iter()
+        .map(|a| {
+            let rel = if *a >= base { a - base } else { *a };
+            format!("0x{:x}", rel)
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let wide = to_wstring(&joined);
+
+    unsafe {
+        let section = to_wstring("Offsets");
+        let key_w = to_wstring(key);
+        WritePrivateProfileStringW(section.as_ptr(), key_w.as_ptr(), wide.as_ptr(), path_ptr) != 0
+    }
 }

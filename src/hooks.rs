@@ -1,11 +1,9 @@
 use crate::config::get_config;
-use crate::scanner::{resolve_relative_address, scan};
+use crate::scan_key;
 use min_hook_rs::{ALL_HOOKS, create_hook, enable_hook};
 use std::ffi::{c_char, c_void};
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
-use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-
 // =============================================================================================
 // IL2CPP Structures
 // =============================================================================================
@@ -168,7 +166,7 @@ unsafe extern "system" fn hook_display_fog(a1: *mut c_void, a2: *mut c_void) -> 
         if should_disable_fog && !a2.is_null() {
             // Use addr_of_mut to get a stable pointer to FAKE_FOG_STRUCT
             let fake_fog_ptr = ptr::addr_of_mut!(FAKE_FOG_STRUCT);
-            // Because the struct is #[repr(C)] and has only one field, casting to a u8 pointer is safe
+            // Because the struct is #[repr(C)] and has only one field, casting to an u8 pointer is safe
             let buffer_ptr = fake_fog_ptr as *mut u8;
 
             // Copy memory from a2 to FAKE_FOG_STRUCT
@@ -287,14 +285,12 @@ pub fn init_hooks() -> bool {
         return false;
     }
 
-    // New: Add base address
-    let base = unsafe { GetModuleHandleW(ptr::null()) } as usize;
-
-    // 2. Get_FrameCount
-    let mut get_frame_count_addr =
-        scan("E8 ? ? ? ? 85 C0 7E 0E E8 ? ? ? ? 0F 57 C0 F3 0F 2A C0 EB 08");
-    get_frame_count_addr = resolve_relative_address(get_frame_count_addr, 1, 5);
-    get_frame_count_addr = resolve_relative_address(get_frame_count_addr, 1, 5);
+    // 1. Get_FrameCount
+    scan_key!(
+        get_frame_count_addr,
+        "E8 ? ? ? ? 85 C0 7E 0E E8 ? ? ? ? 0F 57 C0 F3 0F 2A C0 EB 08",
+        1
+    );
     if !get_frame_count_addr.is_null()
         && let Ok(trampoline) =
             create_hook(get_frame_count_addr, hook_get_frame_count as *mut c_void)
@@ -302,17 +298,20 @@ pub fn init_hooks() -> bool {
         ORIGINAL_GET_FRAME_COUNT.store(trampoline, Ordering::Relaxed);
     }
 
-    // 3. Set_FrameCount (No Hook, just store address)
-    let mut set_frame_count_addr = scan("E8 ? ? ? ? E8 ? ? ? ? 83 F8 1F 0F 9C 05 ? ? ? ? 48 8B 05");
-    set_frame_count_addr = resolve_relative_address(set_frame_count_addr, 1, 5);
-    set_frame_count_addr = resolve_relative_address(set_frame_count_addr, 1, 5);
+    // 2. Set_FrameCount (No Hook, just store address)
+    scan_key!(
+        set_frame_count_addr,
+        "E8 ? ? ? ? E8 ? ? ? ? 83 F8 1F 0F 9C 05 ? ? ? ? 48 8B 05",
+        1
+    );
     if !set_frame_count_addr.is_null() {
         ORIGINAL_SET_FRAME_COUNT.store(set_frame_count_addr, Ordering::Relaxed);
     }
 
-    // 4. ChangeFOV
-    let change_fov_addr = scan(
-        "40 53 48 83 EC 60 0F 29 74 24 ? 48 8B D9 0F 28 F1 E8 ? ? ? ? 48 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 48 8B C8 ",
+    // 3. ChangeFOV
+    scan_key!(
+        change_fov_addr,
+        "40 53 48 83 EC 60 0F 29 74 24 ? 48 8B D9 0F 28 F1 E8 ? ? ? ? 48 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 48 8B C8 "
     );
     if !change_fov_addr.is_null()
         && let Ok(trampoline) = create_hook(change_fov_addr, hook_change_fps_and_fov as *mut c_void)
@@ -320,9 +319,10 @@ pub fn init_hooks() -> bool {
         ORIGINAL_CHANGE_FOV.store(trampoline, Ordering::Relaxed);
     }
 
-    // 5. DisplayFog
-    let display_fog_addr = scan(
-        "0F B6 02 88 01 8B 42 04 89 41 04 F3 0F 10 52 ? F3 0F 10 4A ? F3 0F 10 42 ? 8B 42 08 ",
+    // 4. DisplayFog
+    scan_key!(
+        display_fog_addr,
+        "0F B6 02 88 01 8B 42 04 89 41 04 F3 0F 10 52 ? F3 0F 10 4A ? F3 0F 10 42 ? 8B 42 08 "
     );
     if !display_fog_addr.is_null()
         && let Ok(trampoline) = create_hook(display_fog_addr, hook_display_fog as *mut c_void)
@@ -330,10 +330,12 @@ pub fn init_hooks() -> bool {
         ORIGINAL_DISPLAY_FOG.store(trampoline, Ordering::Relaxed);
     }
 
-    // 6. Player_Perspective
-    let mut player_perspective_addr =
-        scan("E8 ? ? ? ? 48 8B BE ? ? ? ? 80 3D ? ? ? ? ? 0F 85 ? ? ? ? 80 BE ? ? ? ? ? 74 11");
-    player_perspective_addr = resolve_relative_address(player_perspective_addr, 1, 5);
+    // 5. Player_Perspective
+    scan_key!(
+        player_perspective_addr,
+        "E8 ? ? ? ? 48 8B BE ? ? ? ? 80 3D ? ? ? ? ? 0F 85 ? ? ? ? 80 BE ? ? ? ? ? 74 11",
+        1
+    );
     if !player_perspective_addr.is_null()
         && let Ok(trampoline) = create_hook(
             player_perspective_addr,
@@ -343,23 +345,26 @@ pub fn init_hooks() -> bool {
         ORIGINAL_PLAYER_PERSPECTIVE.store(trampoline, Ordering::Relaxed);
     }
 
-    // 7. Craft Redirect
-    let find_string_addr = scan(
-        "56 48 83 ec 20 48 89 ce e8 ? ? ? ? 48 89 f1 89 c2 48 83 c4 20 5e e9 ? ? ? ? cc cc cc cc",
+    // 6. Craft Redirect
+    scan_key!(
+        find_string_addr,
+        "56 48 83 ec 20 48 89 ce e8 ? ? ? ? 48 89 f1 89 c2 48 83 c4 20 5e e9 ? ? ? ? cc cc cc cc"
     );
     if !find_string_addr.is_null() {
         FIND_STRING.store(find_string_addr, Ordering::Relaxed);
     }
 
-    let craft_entry_partner_addr = scan(
-        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 ec ? ? ? ? 4d 89 cd 4c 89 c6 49 89 d4 49 89 ce 4c 8b bc 24",
+    scan_key!(
+        craft_entry_partner_addr,
+        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 ec ? ? ? ? 4d 89 cd 4c 89 c6 49 89 d4 49 89 ce 4c 8b bc 24"
     );
     if !craft_entry_partner_addr.is_null() {
         CRAFT_ENTRY_PARTNER.store(craft_entry_partner_addr, Ordering::Relaxed);
     }
 
-    let craft_entry_addr = scan(
-        "41 56 56 57 53 48 83 EC 58 49 89 CE 80 3D ? ? ? ? 00 0F 84 ? ? ? ? 80 3D ? ? ? ? 00 48 8B 0D ? ? ? ? 0F 85",
+    scan_key!(
+        craft_entry_addr,
+        "41 56 56 57 53 48 83 EC 58 49 89 CE 80 3D ? ? ? ? 00 0F 84 ? ? ? ? 80 3D ? ? ? ? 00 48 8B 0D ? ? ? ? 0F 85"
     );
     if !craft_entry_addr.is_null()
         && let Ok(trampoline) = create_hook(craft_entry_addr, hook_craft_entry as *mut c_void)
@@ -367,23 +372,27 @@ pub fn init_hooks() -> bool {
         ORIGINAL_CRAFT_ENTRY.store(trampoline, Ordering::Relaxed);
     }
 
-    // 8. Team Anime
-    let check_can_enter_addr =
-        scan("56 48 81 ec 80 00 00 00 80 3d ? ? ? ? 00 0f 84 ? ? ? ? 80 3d ? ? ? ? 00");
+    // 7. Team Anime
+    scan_key!(
+        check_can_enter_addr,
+        "56 48 81 ec 80 00 00 00 80 3d ? ? ? ? 00 0f 84 ? ? ? ? 80 3d ? ? ? ? 00"
+    );
     if !check_can_enter_addr.is_null() {
         CHECK_CAN_ENTER.store(check_can_enter_addr, Ordering::Relaxed);
     }
 
-    let open_team_page_addr =
-        scan("56 57 53 48 83 ec 20 89 cb 80 3d ? ? ? ? 00 74 7a 80 3d ? ? ? ? 00 48 8b 05");
+    scan_key!(
+        open_team_page_addr,
+        "56 57 53 48 83 ec 20 89 cb 80 3d ? ? ? ? 00 74 7a 80 3d ? ? ? ? 00 48 8b 05"
+    );
     if !open_team_page_addr.is_null() {
         OPEN_TEAM_PAGE_ACCORDINGLY.store(open_team_page_addr, Ordering::Relaxed);
     }
 
-    // let open_team_addr = scan(
-    //     "48 83 ec 28 80 3d ?? ?? ?? ?? 00 75 ?? 48 8b 0d ?? ?? ?? ?? 80 b9 ?? ?? ?? ?? 00 74 ?? b9 ?? ?? ?? ?? e8 ?? ?? ?? ?? 84 c0 74 ?? 48 83 c4 28 c3 48 8b 05 ?? ?? ?? ?? 48 8b 80 ?? ?? ?? ?? 48 8b 88 ?? ?? ?? ?? 48 85 c9 0f 84 ?? ?? ?? ?? 48 83 c4 28 e9 ?? ?? ?? ?? e8 ?? ?? ?? ?? b9 ?? ?? ?? ?? e8 ?? ?? ?? ?? 84 c0 75 ?? 48 8b 05",
-    // );
-    let open_team_addr = (base + 0xb8dcfa0) as *mut c_void;
+    scan_key!(
+        open_team_addr,
+        "48 83 EC ? 80 3D ? ? ? ? 00 75 ? 48 8B 0D ? ? ? ? 80 B9 ? ? ? ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 84 C0 ? ? 48 83 C4 ? C3 48 8B 05 ? ? ? ? 48 8B 80 ? ? ? ? 48 8B 88 ? ? ? ? 48 85 C9 0F 84 ? ? ? ? 48 83 C4 ? E9 ? ? ? ? E8 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 84 C0 75 ? 48 8B 05"
+    );
     if !open_team_addr.is_null()
         && let Ok(trampoline) = create_hook(open_team_addr, hook_open_team as *mut c_void)
     {
