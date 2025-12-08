@@ -15,6 +15,7 @@ pub struct Config {
     pub selected_fps: i32,
     pub enable_fov_override: bool,
     pub fov_value: f32,
+    pub use_touch_screen: bool,
 
     // Visuals
     pub enable_display_fog_override: bool,
@@ -35,6 +36,7 @@ impl Default for Config {
             selected_fps: 60,
             enable_fov_override: false,
             fov_value: 60.0,
+            use_touch_screen: false,
             enable_display_fog_override: false,
             enable_perspective_override: false,
             enable_redirect_craft_override: false,
@@ -109,6 +111,13 @@ pub fn load_config() {
         new_config.enable_fov_override = GetPrivateProfileIntW(
             section_settings.as_ptr(),
             to_wstring("EnableFOVModify").as_ptr(),
+            0,
+            path_ptr,
+        ) != 0;
+
+        new_config.use_touch_screen = GetPrivateProfileIntW(
+            section_settings.as_ptr(),
+            to_wstring("UseTouchScreen").as_ptr(),
             0,
             path_ptr,
         ) != 0;

@@ -1,8 +1,10 @@
 use crate::config::get_config;
+use crate::hutao_seh::try_seh;
 use crate::scan_key;
 use min_hook_rs::{ALL_HOOKS, create_hook, enable_hook};
 use std::ffi::{c_char, c_void};
 use std::ptr;
+use std::sync::Once;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 // =============================================================================================
 // IL2CPP Structures
@@ -35,6 +37,8 @@ static ORIGINAL_CHANGE_FOV: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static ORIGINAL_DISPLAY_FOG: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 // Player_Perspective
 static ORIGINAL_PLAYER_PERSPECTIVE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+// Touch Screen
+static SWITCH_INPUT_DEVICE_TO_TOUCH_SCREEN: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 
 // Craft Redirect
 static FIND_STRING: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
@@ -48,6 +52,7 @@ static ORIGINAL_OPEN_TEAM: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 
 // Global State
 static GAME_UPDATE_INIT: AtomicBool = AtomicBool::new(false);
+static TOUCH_SCREEN_INIT: Once = Once::new();
 
 // =============================================================================================
 // Function Type Definitions
@@ -61,6 +66,9 @@ type SetFrameCountFn = unsafe extern "system" fn(i32) -> i32;
 
 // typedef int(*HookChangeFOV_t)(__int64 a1, float a2);
 type ChangeFovFn = unsafe extern "system" fn(*mut c_void, f32) -> i32;
+
+// typedef void (*SwitchInputDeviceToTouchScreen_t)(void*);
+type SwitchInputDeviceToTouchScreenFn = unsafe extern "system" fn(*mut c_void);
 
 // typedef int(*HookDisplayFog_t)(__int64 a1, __int64 a2);
 type DisplayFogFn = unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32;
@@ -119,16 +127,27 @@ unsafe extern "system" fn hook_get_frame_count() -> i32 {
     }
 }
 
-unsafe extern "system" fn hook_change_fps_and_fov(
-    a1: *mut c_void,
-    mut change_fov_value: f32,
-) -> i32 {
+unsafe extern "system" fn hook_touch_fps_fov(a1: *mut c_void, mut change_fov_value: f32) -> i32 {
     unsafe {
         if !GAME_UPDATE_INIT.load(Ordering::Relaxed) {
             GAME_UPDATE_INIT.store(true, Ordering::Relaxed);
         }
 
         let config = get_config();
+
+        TOUCH_SCREEN_INIT.call_once(|| {
+            if config.use_touch_screen {
+                let switch_input_ptr = SWITCH_INPUT_DEVICE_TO_TOUCH_SCREEN.load(Ordering::Relaxed);
+                if !switch_input_ptr.is_null() {
+                    let switch_input: SwitchInputDeviceToTouchScreenFn =
+                        std::mem::transmute(switch_input_ptr);
+                    // Wrap in SEH as per island.cpp logic
+                    let _ = try_seh(|| {
+                        switch_input(ptr::null_mut());
+                    });
+                }
+            }
+        });
 
         if config.enable_fps_override {
             let set_frame_count_ptr = ORIGINAL_SET_FRAME_COUNT.load(Ordering::Relaxed);
@@ -285,7 +304,7 @@ pub fn init_hooks() -> bool {
         return false;
     }
 
-    // 1. Get_FrameCount
+    // Get_FrameCount
     scan_key!(
         get_frame_count_addr,
         "E8 ? ? ? ? 85 C0 7E 0E E8 ? ? ? ? 0F 57 C0 F3 0F 2A C0 EB 08",
@@ -298,7 +317,7 @@ pub fn init_hooks() -> bool {
         ORIGINAL_GET_FRAME_COUNT.store(trampoline, Ordering::Relaxed);
     }
 
-    // 2. Set_FrameCount (No Hook, just store address)
+    // Set_FrameCount (No Hook, just store address)
     scan_key!(
         set_frame_count_addr,
         "E8 ? ? ? ? E8 ? ? ? ? 83 F8 1F 0F 9C 05 ? ? ? ? 48 8B 05",
@@ -308,18 +327,26 @@ pub fn init_hooks() -> bool {
         ORIGINAL_SET_FRAME_COUNT.store(set_frame_count_addr, Ordering::Relaxed);
     }
 
-    // 3. ChangeFOV
+    // ChangeFOV
     scan_key!(
         change_fov_addr,
         "40 53 48 83 EC 60 0F 29 74 24 ? 48 8B D9 0F 28 F1 E8 ? ? ? ? 48 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 48 8B C8 "
     );
     if !change_fov_addr.is_null()
-        && let Ok(trampoline) = create_hook(change_fov_addr, hook_change_fps_and_fov as *mut c_void)
+        && let Ok(trampoline) = create_hook(change_fov_addr, hook_touch_fps_fov as *mut c_void)
     {
         ORIGINAL_CHANGE_FOV.store(trampoline, Ordering::Relaxed);
     }
 
-    // 4. DisplayFog
+    scan_key!(
+        switch_input_device_addr,
+        "56 57 48 83 EC ? 48 89 CE 80 3D ? ? ? ? 00 48 8B 05 ? ? ? ? 0F 85 ? ? ? ? 48 8B 88 ? ? ? ? 48 85 C9 0F 84 ? ? ? ? 48 8B 15 ? ? ? ? E8 ? ? ? ? 48 89 C7 48 8B 05 ? ? ? ? 48 8B 88 ? ? ? ? 48 85 C9 0F 84 ? ? ? ? 31 D2"
+    );
+    if !switch_input_device_addr.is_null() {
+        SWITCH_INPUT_DEVICE_TO_TOUCH_SCREEN.store(switch_input_device_addr, Ordering::Relaxed);
+    }
+
+    // DisplayFog
     scan_key!(
         display_fog_addr,
         "0F B6 02 88 01 8B 42 04 89 41 04 F3 0F 10 52 ? F3 0F 10 4A ? F3 0F 10 42 ? 8B 42 08 "
@@ -330,7 +357,7 @@ pub fn init_hooks() -> bool {
         ORIGINAL_DISPLAY_FOG.store(trampoline, Ordering::Relaxed);
     }
 
-    // 5. Player_Perspective
+    // Player_Perspective
     scan_key!(
         player_perspective_addr,
         "E8 ? ? ? ? 48 8B BE ? ? ? ? 80 3D ? ? ? ? ? 0F 85 ? ? ? ? 80 BE ? ? ? ? ? 74 11",
@@ -345,7 +372,7 @@ pub fn init_hooks() -> bool {
         ORIGINAL_PLAYER_PERSPECTIVE.store(trampoline, Ordering::Relaxed);
     }
 
-    // 6. Craft Redirect
+    // Craft Redirect
     scan_key!(
         find_string_addr,
         "56 48 83 ec 20 48 89 ce e8 ? ? ? ? 48 89 f1 89 c2 48 83 c4 20 5e e9 ? ? ? ? cc cc cc cc"
@@ -372,7 +399,7 @@ pub fn init_hooks() -> bool {
         ORIGINAL_CRAFT_ENTRY.store(trampoline, Ordering::Relaxed);
     }
 
-    // 7. Team Anime
+    // Team Anime
     scan_key!(
         check_can_enter_addr,
         "56 48 81 ec 80 00 00 00 80 3d ? ? ? ? 00 0f 84 ? ? ? ? 80 3d ? ? ? ? 00"
