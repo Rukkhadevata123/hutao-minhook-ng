@@ -20,6 +20,9 @@ pub struct Config {
     // Visuals
     pub enable_display_fog_override: bool,
     pub enable_perspective_override: bool,
+    pub hide_quest_banner: bool,
+    pub disable_event_camera_move: bool,
+    pub disable_show_damage_text: bool,
 
     // Features
     pub enable_redirect_craft_override: bool,
@@ -39,6 +42,9 @@ impl Default for Config {
             use_touch_screen: false,
             enable_display_fog_override: false,
             enable_perspective_override: false,
+            hide_quest_banner: false,
+            disable_event_camera_move: false,
+            disable_show_damage_text: false,
             enable_redirect_craft_override: false,
             enable_remove_team_anim: false,
             toggle_key: VK_HOME as i32,
@@ -148,6 +154,27 @@ pub fn load_config() {
         new_config.enable_perspective_override = GetPrivateProfileIntW(
             section_visuals.as_ptr(),
             to_wstring("RemoveBlur").as_ptr(),
+            0,
+            path_ptr,
+        ) != 0;
+
+        new_config.hide_quest_banner = GetPrivateProfileIntW(
+            section_visuals.as_ptr(),
+            to_wstring("HideQuestBanner").as_ptr(),
+            0,
+            path_ptr,
+        ) != 0;
+
+        new_config.disable_event_camera_move = GetPrivateProfileIntW(
+            section_visuals.as_ptr(),
+            to_wstring("DisableEventCameraMove").as_ptr(),
+            0,
+            path_ptr,
+        ) != 0;
+
+        new_config.disable_show_damage_text = GetPrivateProfileIntW(
+            section_visuals.as_ptr(),
+            to_wstring("DisableShowDamageText").as_ptr(),
             0,
             path_ptr,
         ) != 0;

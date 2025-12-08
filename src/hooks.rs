@@ -40,6 +40,17 @@ static ORIGINAL_PLAYER_PERSPECTIVE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null
 // Touch Screen
 static SWITCH_INPUT_DEVICE_TO_TOUCH_SCREEN: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 
+// Quest Banner
+static ORIGINAL_SETUP_QUEST_BANNER: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static FIND_GAME_OBJECT: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static SET_ACTIVE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+
+// Event Camera
+static ORIGINAL_EVENT_CAMERA_MOVE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+
+// Damage Text
+static ORIGINAL_SHOW_ONE_DAMAGE_TEXT_EX: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+
 // Craft Redirect
 static FIND_STRING: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static CRAFT_ENTRY_PARTNER: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
@@ -69,6 +80,32 @@ type ChangeFovFn = unsafe extern "system" fn(*mut c_void, f32) -> i32;
 
 // typedef void (*SwitchInputDeviceToTouchScreen_t)(void*);
 type SwitchInputDeviceToTouchScreenFn = unsafe extern "system" fn(*mut c_void);
+
+// Quest Banner Types
+// typedef void (*SetupQuestBanner_t)(void*);
+type SetupQuestBannerFn = unsafe extern "system" fn(*mut c_void);
+// typedef void* (*FindGameObject_t)(Il2CppString*);
+type FindGameObjectFn = unsafe extern "system" fn(*mut Il2CppString) -> *mut c_void;
+// typedef void (*SetActive_t)(void*, bool);
+type SetActiveFn = unsafe extern "system" fn(*mut c_void, bool);
+
+// Event Camera Types
+// typedef bool (*EventCameraMove_t)(void*, void*);
+type EventCameraMoveFn = unsafe extern "system" fn(*mut c_void, *mut c_void) -> bool;
+
+// Damage Text Types
+// typedef void (*ShowOneDamageTextEx_t)(void*, int, int, int, float, Il2CppString*, void*, void*, int);
+type ShowOneDamageTextExFn = unsafe extern "system" fn(
+    *mut c_void,
+    i32,
+    i32,
+    i32,
+    f32,
+    *mut Il2CppString,
+    *mut c_void,
+    *mut c_void,
+    i32,
+);
 
 // typedef int(*HookDisplayFog_t)(__int64 a1, __int64 a2);
 type DisplayFogFn = unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32;
@@ -232,6 +269,96 @@ unsafe extern "system" fn hook_player_perspective(
     }
 }
 
+unsafe extern "system" fn hook_setup_quest_banner(p_this: *mut c_void) {
+    unsafe {
+        let config = get_config();
+        if config.hide_quest_banner {
+            let find_string_ptr = FIND_STRING.load(Ordering::Relaxed);
+            let find_game_object_ptr = FIND_GAME_OBJECT.load(Ordering::Relaxed);
+            let set_active_ptr = SET_ACTIVE.load(Ordering::Relaxed);
+
+            if !find_string_ptr.is_null()
+                && !find_game_object_ptr.is_null()
+                && !set_active_ptr.is_null()
+            {
+                let find_string: FindStringFn = std::mem::transmute(find_string_ptr);
+                let find_game_object: FindGameObjectFn = std::mem::transmute(find_game_object_ptr);
+                let set_active: SetActiveFn = std::mem::transmute(set_active_ptr);
+
+                let s = b"Canvas/Pages/InLevelMapPage/GrpMap/GrpPointTips/Layout/QuestBanner\0";
+                let str_obj = find_string(s.as_ptr() as *const c_char);
+                if !str_obj.is_null() {
+                    let banner = find_game_object(str_obj);
+                    if !banner.is_null() {
+                        set_active(banner, false);
+                        // We successfully hid it, so we can skip the original call or call it?
+                        // island.cpp logic: if hiding, find object and hide it. It does NOT call original SetupQuestBanner in the else branch.
+                        return;
+                    }
+                }
+            }
+        }
+
+        let original_ptr = ORIGINAL_SETUP_QUEST_BANNER.load(Ordering::Relaxed);
+        if !original_ptr.is_null() {
+            let original: SetupQuestBannerFn = std::mem::transmute(original_ptr);
+            original(p_this);
+        }
+    }
+}
+
+unsafe extern "system" fn hook_event_camera_move(p_this: *mut c_void, event: *mut c_void) -> bool {
+    unsafe {
+        let config = get_config();
+        if config.disable_event_camera_move {
+            return true;
+        }
+
+        let original_ptr = ORIGINAL_EVENT_CAMERA_MOVE.load(Ordering::Relaxed);
+        if !original_ptr.is_null() {
+            let original: EventCameraMoveFn = std::mem::transmute(original_ptr);
+            original(p_this, event)
+        } else {
+            true // Default return?
+        }
+    }
+}
+
+unsafe extern "system" fn hook_show_one_damage_text_ex(
+    p_this: *mut c_void,
+    type_: i32,
+    damage_type: i32,
+    show_type: i32,
+    damage: f32,
+    show_text: *mut Il2CppString,
+    world_pos: *mut c_void,
+    attackee: *mut c_void,
+    element_reaction_type: i32,
+) {
+    unsafe {
+        let config = get_config();
+        if config.disable_show_damage_text {
+            return;
+        }
+
+        let original_ptr = ORIGINAL_SHOW_ONE_DAMAGE_TEXT_EX.load(Ordering::Relaxed);
+        if !original_ptr.is_null() {
+            let original: ShowOneDamageTextExFn = std::mem::transmute(original_ptr);
+            original(
+                p_this,
+                type_,
+                damage_type,
+                show_type,
+                damage,
+                show_text,
+                world_pos,
+                attackee,
+                element_reaction_type,
+            );
+        }
+    }
+}
+
 unsafe extern "system" fn hook_craft_entry(p_this: *mut c_void) {
     unsafe {
         let config = get_config();
@@ -338,12 +465,75 @@ pub fn init_hooks() -> bool {
         ORIGINAL_CHANGE_FOV.store(trampoline, Ordering::Relaxed);
     }
 
+    // SwitchInputDeviceToTouchScreen
     scan_key!(
         switch_input_device_addr,
         "56 57 48 83 EC ? 48 89 CE 80 3D ? ? ? ? 00 48 8B 05 ? ? ? ? 0F 85 ? ? ? ? 48 8B 88 ? ? ? ? 48 85 C9 0F 84 ? ? ? ? 48 8B 15 ? ? ? ? E8 ? ? ? ? 48 89 C7 48 8B 05 ? ? ? ? 48 8B 88 ? ? ? ? 48 85 C9 0F 84 ? ? ? ? 31 D2"
     );
     if !switch_input_device_addr.is_null() {
         SWITCH_INPUT_DEVICE_TO_TOUCH_SCREEN.store(switch_input_device_addr, Ordering::Relaxed);
+    }
+
+    // SetupQuestBanner
+    scan_key!(
+        setup_quest_banner_addr,
+        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 66 44 0F 7F 8C 24 ? ? ? ? 66 44 0F 7F 84 24 ? ? ? ? 0F 29 BC 24"
+    );
+    if !setup_quest_banner_addr.is_null()
+        && let Ok(trampoline) = create_hook(
+            setup_quest_banner_addr,
+            hook_setup_quest_banner as *mut c_void,
+        )
+    {
+        ORIGINAL_SETUP_QUEST_BANNER.store(trampoline, Ordering::Relaxed);
+    }
+
+    // FindGameObject (Resolve 1 for E9 jump)
+    scan_key!(
+        find_game_object_addr,
+        "E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? 48 83 EC ? C7 44 24 ? 00 00 00 00 48 8D 54 24",
+        1
+    );
+    if !find_game_object_addr.is_null() {
+        FIND_GAME_OBJECT.store(find_game_object_addr, Ordering::Relaxed);
+    }
+
+    // SetActive (Resolve 1 for E9 jump)
+    scan_key!(
+        set_active_addr,
+        "E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? 45 31 C9",
+        1
+    );
+    if !set_active_addr.is_null() {
+        SET_ACTIVE.store(set_active_addr, Ordering::Relaxed);
+    }
+
+    // EventCameraMove
+    scan_key!(
+        event_camera_move_addr,
+        "41 57 41 56 56 57 55 53 48 83 EC ? 48 89 D7 49 89 CE 80 3D ? ? ? ? 00 0F 85 ? ? ? ? 80 3D ? ? ? ? 00"
+    );
+    if !event_camera_move_addr.is_null()
+        && let Ok(trampoline) = create_hook(
+            event_camera_move_addr,
+            hook_event_camera_move as *mut c_void,
+        )
+    {
+        ORIGINAL_EVENT_CAMERA_MOVE.store(trampoline, Ordering::Relaxed);
+    }
+
+    // ShowOneDamageTextEx
+    scan_key!(
+        show_one_damage_text_ex_addr,
+        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 44 0F 29 9C 24 ? ? ? ? 44 0F 29 94 24 ? ? ? ? 44 0F 29 8C 24 ? ? ? ? 44 0F 29 84 24 ? ? ? ? 0F 29 BC 24 ? ? ? ? 0F 29 B4 24 ? ? ? ? 44 89 CF 45 89 C4"
+    );
+    if !show_one_damage_text_ex_addr.is_null()
+        && let Ok(trampoline) = create_hook(
+            show_one_damage_text_ex_addr,
+            hook_show_one_damage_text_ex as *mut c_void,
+        )
+    {
+        ORIGINAL_SHOW_ONE_DAMAGE_TEXT_EX.store(trampoline, Ordering::Relaxed);
     }
 
     // DisplayFog
