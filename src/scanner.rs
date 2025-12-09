@@ -2,8 +2,10 @@ use crate::hutao_seh::try_seh;
 use std::collections::HashSet;
 use std::ffi::c_void;
 use std::ptr;
+use windows_sys::Win32::System::Diagnostics::Debug::IMAGE_NT_HEADERS64;
+use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Memory::*;
-use windows_sys::Win32::System::SystemInformation::*;
+use windows_sys::Win32::System::SystemServices::IMAGE_DOS_HEADER;
 
 /// Represents a memory region that is safe to scan.
 struct RegionInfo {
@@ -21,15 +23,39 @@ fn is_readable_or_executable(protect: u32) -> bool {
         || protect == PAGE_WRITECOPY
 }
 
-/// Retrieves all committed and readable memory regions in the process.
+/// Helper to get the Main Module's (exe) Base Address and SizeOfImage
+fn get_main_module_range() -> (usize, usize) {
+    unsafe {
+        let base = GetModuleHandleW(ptr::null()) as usize;
+        if base == 0 {
+            return (0, 0);
+        }
+        let dos_header = base as *const IMAGE_DOS_HEADER;
+        if (*dos_header).e_magic != 0x5A4D {
+            // Not MZ
+            return (0, 0);
+        }
+        let nt_headers = (base + (*dos_header).e_lfanew as usize) as *const IMAGE_NT_HEADERS64;
+        if (*nt_headers).Signature != 0x00004550 {
+            // Not PE
+            return (0, 0);
+        }
+        let size = (*nt_headers).OptionalHeader.SizeOfImage as usize;
+        (base, size)
+    }
+}
+
+/// Retrieves all committed and readable memory regions WITHIN the main module.
 fn get_memory_regions() -> Vec<RegionInfo> {
     let mut regions = Vec::new();
     unsafe {
-        let mut sys_info: SYSTEM_INFO = std::mem::zeroed();
-        GetSystemInfo(&mut sys_info);
+        let (module_base, module_size) = get_main_module_range();
+        if module_base == 0 || module_size == 0 {
+            return regions;
+        }
 
-        let mut start = sys_info.lpMinimumApplicationAddress as usize;
-        let end = sys_info.lpMaximumApplicationAddress as usize;
+        let mut start = module_base;
+        let end = module_base + module_size;
 
         let mut mbi: MEMORY_BASIC_INFORMATION = std::mem::zeroed();
 
@@ -43,6 +69,7 @@ fn get_memory_regions() -> Vec<RegionInfo> {
                 break;
             }
 
+            // Only include regions that are committed, readable/executable, AND inside our module range
             if mbi.State == MEM_COMMIT && is_readable_or_executable(mbi.Protect) {
                 regions.push(RegionInfo {
                     base: mbi.BaseAddress,
@@ -56,61 +83,132 @@ fn get_memory_regions() -> Vec<RegionInfo> {
     regions
 }
 
-/// Parses a pattern string (e.g., "E8 ? ? ? ? 48") into a vector of bytes and masks.
-/// None represents a wildcard (?).
-fn parse_pattern(pattern: &str) -> Vec<Option<u8>> {
-    pattern
-        .split_whitespace()
-        .map(|s| {
-            if s == "?" || s == "??" {
-                None
-            } else {
-                u8::from_str_radix(s, 16).ok()
-                // This is equivalent to just using .ok() though
-            }
-        })
-        .collect()
+/// Optimized pattern structure
+struct Pattern {
+    bytes: Vec<u8>,
+    mask: Vec<u8>,
+    // Offset of the first non-wildcard byte to use for fast scanning
+    anchor_offset: Option<usize>,
 }
 
-/// Scans a specific memory region for the pattern.
-/// Wrapped in SEH to handle potential access violations safely.
+/// Parses a pattern string into a structure optimized for scanning.
+/// "AA ? BB" -> bytes: [0xAA, 0x00, 0xBB], mask: [0xFF, 0x00, 0xFF]
+fn parse_pattern(pattern: &str) -> Pattern {
+    let mut bytes = Vec::new();
+    let mut mask = Vec::new();
+    let mut anchor_offset = None;
+
+    for (i, s) in pattern.split_whitespace().enumerate() {
+        if s == "?" || s == "??" {
+            bytes.push(0);
+            mask.push(0); // 0x00 means wildcard
+        } else {
+            let b = u8::from_str_radix(s, 16).unwrap_or(0);
+            bytes.push(b);
+            mask.push(0xFF); // 0xFF means exact match
+
+            // Record the first non-wildcard byte index
+            if anchor_offset.is_none() {
+                anchor_offset = Some(i);
+            }
+        }
+    }
+
+    Pattern {
+        bytes,
+        mask,
+        anchor_offset,
+    }
+}
+
+/// Scans a specific memory region using an optimized algorithm.
+/// 1. Uses memchr to find the first non-wildcard byte (very fast).
+/// 2. Verifies the rest of the pattern only when the anchor is found.
 fn scan_region(
     region_base: *mut c_void,
     region_size: usize,
-    pattern: &[Option<u8>],
+    pattern: &Pattern,
 ) -> Vec<*mut c_void> {
-    let pattern_len = pattern.len();
+    let pattern_len = pattern.bytes.len();
     if region_size < pattern_len {
         return Vec::new();
     }
 
-    // Use try_seh to catch Access Violations during memory read
+    // Use try_seh to catch Access Violations
     let result = try_seh(|| unsafe {
         let mut results: Vec<*mut c_void> = Vec::new();
-        let base = region_base as *const u8;
-        let end = region_size - pattern_len;
+        let base_ptr = region_base as *const u8;
+        // Convert the entire region to a slice for safe Rust iteration
+        let region_slice = std::slice::from_raw_parts(base_ptr, region_size);
 
-        for i in 0..=end {
-            let mut found = true;
-            for (j, &byte_pattern) in pattern.iter().enumerate() {
-                if let Some(b) = byte_pattern
-                    && *base.add(i + j) != b
+        match pattern.anchor_offset {
+            Some(anchor_idx) => {
+                // Optimized Path: We have a solid byte to search for.
+                let anchor_byte = pattern.bytes[anchor_idx];
+                let mut offset = 0;
+
+                // Search loop
+                while let Some(pos) = region_slice[offset..]
+                    .iter()
+                    .position(|&b| b == anchor_byte)
                 {
-                    found = false;
-                    break;
+                    let current_match_pos = offset + pos;
+
+                    // Calculate where the pattern would start if this anchor matches
+                    // Be careful with underflow (usize)
+                    if current_match_pos >= anchor_idx {
+                        let start_candidate = current_match_pos - anchor_idx;
+
+                        // Check bounds
+                        if start_candidate + pattern_len <= region_size {
+                            // Verify the full pattern
+                            let mut is_match = true;
+                            // We can skip the anchor_idx since we just found it
+                            for i in 0..pattern_len {
+                                if i == anchor_idx {
+                                    continue;
+                                }
+
+                                let mem_byte = *base_ptr.add(start_candidate + i);
+                                let pat_byte = pattern.bytes[i];
+                                let mask_byte = pattern.mask[i];
+
+                                // (mem & mask) == (pat & mask) logic
+                                // Since pat_byte is already 0 where mask is 0, we can just do:
+                                if (mem_byte & mask_byte) != pat_byte {
+                                    is_match = false;
+                                    break;
+                                }
+                            }
+
+                            if is_match {
+                                results.push(base_ptr.add(start_candidate) as *mut c_void);
+                            }
+                        }
+                    }
+
+                    // Move past this match to continue searching
+                    offset = current_match_pos + 1;
+                    if offset >= region_size {
+                        break;
+                    }
                 }
             }
-            if found {
-                results.push(base.add(i) as *mut c_void);
+            None => {
+                // Degenerate case: Pattern is ALL wildcards ("? ? ?").
+                // Just return everything? Or just the first one?
+                // Usually this implies a bad config, but we'll do a naive scan.
+                if pattern_len <= region_size {
+                    for i in 0..=(region_size - pattern_len) {
+                        results.push(base_ptr.add(i) as *mut c_void);
+                    }
+                }
             }
         }
         results
     });
 
-    result.unwrap_or_else(|_| {
-        // Access Violation occurred in this region, skip it
-        Vec::new()
-    })
+    result.unwrap_or_else(|_| Vec::new())
 }
 
 /// Scans all valid memory regions for the given pattern string up to `limit` matches.
