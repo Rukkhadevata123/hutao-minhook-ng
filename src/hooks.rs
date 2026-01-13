@@ -269,30 +269,42 @@ unsafe extern "system" fn hook_player_perspective(
     }
 }
 
-unsafe extern "system" fn hook_setup_quest_banner(p_this: *mut c_void) {
+unsafe extern "system" fn hook_hide_something(p_this: *mut c_void) {
     unsafe {
         let config = get_config();
-        if config.hide_quest_banner {
-            let find_string_ptr = FIND_STRING.load(Ordering::Relaxed);
-            let find_game_object_ptr = FIND_GAME_OBJECT.load(Ordering::Relaxed);
-            let set_active_ptr = SET_ACTIVE.load(Ordering::Relaxed);
 
-            if !find_string_ptr.is_null()
-                && !find_game_object_ptr.is_null()
-                && !set_active_ptr.is_null()
-            {
-                let find_string: FindStringFn = std::mem::transmute(find_string_ptr);
-                let find_game_object: FindGameObjectFn = std::mem::transmute(find_game_object_ptr);
-                let set_active: SetActiveFn = std::mem::transmute(set_active_ptr);
+        let find_string_ptr = FIND_STRING.load(Ordering::Relaxed);
+        let find_game_object_ptr = FIND_GAME_OBJECT.load(Ordering::Relaxed);
+        let set_active_ptr = SET_ACTIVE.load(Ordering::Relaxed);
 
+        if !find_string_ptr.is_null()
+            && !find_game_object_ptr.is_null()
+            && !set_active_ptr.is_null()
+        {
+            let find_string: FindStringFn = std::mem::transmute(find_string_ptr);
+            let find_game_object: FindGameObjectFn = std::mem::transmute(find_game_object_ptr);
+            let set_active: SetActiveFn = std::mem::transmute(set_active_ptr);
+
+            // Hide UID Logic
+            if config.hide_uid {
+                let s = b"/BetaWatermarkCanvas(Clone)/Panel/TxtUID\0";
+                let str_obj = find_string(s.as_ptr() as *const c_char);
+                if !str_obj.is_null() {
+                    let uid_obj = find_game_object(str_obj);
+                    if !uid_obj.is_null() {
+                        set_active(uid_obj, false);
+                    }
+                }
+            }
+
+            // Hide Quest Banner Logic
+            if config.hide_quest_banner {
                 let s = b"Canvas/Pages/InLevelMapPage/GrpMap/GrpPointTips/Layout/QuestBanner\0";
                 let str_obj = find_string(s.as_ptr() as *const c_char);
                 if !str_obj.is_null() {
                     let banner = find_game_object(str_obj);
                     if !banner.is_null() {
                         set_active(banner, false);
-                        // We successfully hid it, so we can skip the original call or call it?
-                        // island.cpp logic: if hiding, find object and hide it. It does NOT call original SetupQuestBanner in the else branch.
                         return;
                     }
                 }
@@ -480,10 +492,8 @@ pub fn init_hooks() -> bool {
         "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 66 44 0F 7F 8C 24 ? ? ? ? 66 44 0F 7F 84 24 ? ? ? ? 0F 29 BC 24"
     );
     if !setup_quest_banner_addr.is_null()
-        && let Ok(trampoline) = create_hook(
-            setup_quest_banner_addr,
-            hook_setup_quest_banner as *mut c_void,
-        )
+        && let Ok(trampoline) =
+            create_hook(setup_quest_banner_addr, hook_hide_something as *mut c_void)
     {
         ORIGINAL_SETUP_QUEST_BANNER.store(trampoline, Ordering::Relaxed);
     }

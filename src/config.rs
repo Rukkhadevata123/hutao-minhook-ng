@@ -21,6 +21,7 @@ pub struct Config {
     pub enable_display_fog_override: bool,
     pub enable_perspective_override: bool,
     pub hide_quest_banner: bool,
+    pub hide_uid: bool,
     pub disable_event_camera_move: bool,
     pub disable_show_damage_text: bool,
 
@@ -43,6 +44,7 @@ impl Default for Config {
             enable_display_fog_override: false,
             enable_perspective_override: false,
             hide_quest_banner: false,
+            hide_uid: false,
             disable_event_camera_move: false,
             disable_show_damage_text: false,
             enable_redirect_craft_override: false,
@@ -161,6 +163,13 @@ pub fn load_config() {
         new_config.hide_quest_banner = GetPrivateProfileIntW(
             section_visuals.as_ptr(),
             to_wstring("HideQuestBanner").as_ptr(),
+            0,
+            path_ptr,
+        ) != 0;
+
+        new_config.hide_uid = GetPrivateProfileIntW(
+            section_visuals.as_ptr(),
+            to_wstring("HideUID").as_ptr(),
             0,
             path_ptr,
         ) != 0;
