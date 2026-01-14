@@ -489,7 +489,7 @@ pub fn init_hooks() -> bool {
     // SetupQuestBanner
     scan_key!(
         setup_quest_banner_addr,
-        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 66 44 0F 7F 8C 24 ? ? ? ? 66 44 0F 7F 84 24 ? ? ? ? 0F 29 BC 24"
+        "41 57 41 56 56 57 55 53 48 81 EC ? ? ? ? 0F 29 BC 24 ? ? ? ? 0F 29 B4 24 ? ? ? ? 48 89 CE 80 3D ? ? ? ? 00 0F 85 ? ? ? ? 48 8B 96"
     );
     if !setup_quest_banner_addr.is_null()
         && let Ok(trampoline) =
@@ -583,7 +583,7 @@ pub fn init_hooks() -> bool {
 
     scan_key!(
         craft_entry_partner_addr,
-        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 ec ? ? ? ? 4d 89 cd 4c 89 c6 49 89 d4 49 89 ce 4c 8b bc 24"
+        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 4D 89 CF 4C 89 C6 49 89 D4 49 89 CE"
     );
     if !craft_entry_partner_addr.is_null() {
         CRAFT_ENTRY_PARTNER.store(craft_entry_partner_addr, Ordering::Relaxed);
@@ -618,7 +618,7 @@ pub fn init_hooks() -> bool {
 
     scan_key!(
         open_team_addr,
-        "48 83 EC ? 80 3D ? ? ? ? 00 75 ? 48 8B 0D ? ? ? ? 80 B9 ? ? ? ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 84 C0 ? ? 48 83 C4 ? C3 48 8B 05 ? ? ? ? 48 8B 80 ? ? ? ? 48 8B 88 ? ? ? ? 48 85 C9 0F 84 ? ? ? ? 48 83 C4 ? E9 ? ? ? ? E8 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 84 C0 75 ? 48 8B 05"
+        "48 83 EC ? 80 3D ? ? ? ? 00 75 ? 48 8B 0D ? ? ? ? 80 B9 ? ? ? ? 00 0F 84 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 84 C0 75"
     );
     if !open_team_addr.is_null()
         && let Ok(trampoline) = create_hook(open_team_addr, hook_open_team as *mut c_void)
