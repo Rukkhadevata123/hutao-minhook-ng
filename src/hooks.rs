@@ -64,6 +64,8 @@ static ORIGINAL_OPEN_TEAM: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 // Global State
 static GAME_UPDATE_INIT: AtomicBool = AtomicBool::new(false);
 static TOUCH_SCREEN_INIT: Once = Once::new();
+// Flag to request opening the craft menu from the main thread
+static REQUEST_OPEN_CRAFT: AtomicBool = AtomicBool::new(false);
 
 // =============================================================================================
 // Function Type Definitions
@@ -143,6 +145,42 @@ type OpenTeamPageAccordinglyFn = unsafe extern "system" fn(bool);
 // Hook Implementations
 // =============================================================================================
 
+// Public helper to set the request flag
+pub fn request_open_craft() {
+    REQUEST_OPEN_CRAFT.store(true, Ordering::Relaxed);
+}
+
+// Internal helper to actually open the menu (must be called from main thread)
+// Returns true if successfully dispatched
+unsafe fn do_open_craft_menu() -> bool {
+    let find_string_ptr = FIND_STRING.load(Ordering::Relaxed);
+    let craft_partner_ptr = CRAFT_ENTRY_PARTNER.load(Ordering::Relaxed);
+
+    if !find_string_ptr.is_null() && !craft_partner_ptr.is_null() {
+        unsafe {
+            let find_string: FindStringFn = std::mem::transmute(find_string_ptr);
+            let craft_entry_partner: CraftEntryPartnerFn = std::mem::transmute(craft_partner_ptr);
+
+            // path to the global combine page
+            let s = b"SynthesisPage\0";
+            let str_obj = find_string(s.as_ptr() as *const c_char);
+
+            if !str_obj.is_null() {
+                // Invoke the page opener
+                craft_entry_partner(
+                    str_obj,
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                );
+                return true;
+            }
+        }
+    }
+    false
+}
+
 unsafe extern "system" fn hook_get_frame_count() -> i32 {
     unsafe {
         let original_ptr = ORIGINAL_GET_FRAME_COUNT.load(Ordering::Relaxed);
@@ -171,6 +209,13 @@ unsafe extern "system" fn hook_touch_fps_fov(a1: *mut c_void, mut change_fov_val
         }
 
         let config = get_config();
+
+        // Check for craft menu request (Main Thread Execution)
+        if REQUEST_OPEN_CRAFT.load(Ordering::Relaxed) {
+            REQUEST_OPEN_CRAFT.store(false, Ordering::Relaxed);
+            // We don't care about the return value here, just do it
+            do_open_craft_menu();
+        }
 
         TOUCH_SCREEN_INIT.call_once(|| {
             if config.use_touch_screen {
@@ -374,30 +419,11 @@ unsafe extern "system" fn hook_show_one_damage_text_ex(
 unsafe extern "system" fn hook_craft_entry(p_this: *mut c_void) {
     unsafe {
         let config = get_config();
-        let find_string_ptr = FIND_STRING.load(Ordering::Relaxed);
-        let craft_entry_partner_ptr = CRAFT_ENTRY_PARTNER.load(Ordering::Relaxed);
 
-        if config.enable_redirect_craft_override
-            && !find_string_ptr.is_null()
-            && !craft_entry_partner_ptr.is_null()
-        {
-            let find_string: FindStringFn = std::mem::transmute(find_string_ptr);
-            let craft_entry_partner: CraftEntryPartnerFn =
-                std::mem::transmute(craft_entry_partner_ptr);
-
-            // "SynthesisPage" null-terminated string
-            let s = b"SynthesisPage\0";
-            let str_obj = find_string(s.as_ptr() as *const c_char);
-            if !str_obj.is_null() {
-                craft_entry_partner(
-                    str_obj,
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                );
-                return;
-            }
+        // If redirect is enabled AND we successfully opened the menu via our helper
+        if config.enable_redirect_craft_override && do_open_craft_menu() {
+            // Return early, skipping the original tedious dialog
+            return;
         }
 
         let original_ptr = ORIGINAL_CRAFT_ENTRY.load(Ordering::Relaxed);

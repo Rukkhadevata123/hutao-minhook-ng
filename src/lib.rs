@@ -13,7 +13,7 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 use windows_sys::core::BOOL;
 
 use crate::config::{get_config, load_config, setup_config_path};
-use crate::hooks::{init_hooks, is_game_update_init};
+use crate::hooks::{init_hooks, is_game_update_init, request_open_craft};
 
 /// The main worker thread function.
 /// Corresponds to the `Run` function in the C++ version.
@@ -45,6 +45,13 @@ unsafe extern "system" fn run(h_module: *mut c_void) -> u32 {
             if (GetAsyncKeyState(config.toggle_key) as u16 & 0x8000) != 0 {
                 load_config();
                 // Simple debounce to prevent multiple reloads per press
+                Sleep(500);
+            }
+
+            // Check for Craft Key
+            if config.craft_key != 0 && (GetAsyncKeyState(config.craft_key) as u16 & 0x8000) != 0 {
+                request_open_craft();
+                // Debounce to prevent opening multiple pages at once
                 Sleep(500);
             }
 

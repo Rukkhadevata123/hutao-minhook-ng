@@ -31,6 +31,7 @@ pub struct Config {
 
     // Hotkeys
     pub toggle_key: i32,
+    pub craft_key: i32,
 }
 
 impl Default for Config {
@@ -50,6 +51,7 @@ impl Default for Config {
             enable_redirect_craft_override: false,
             enable_remove_team_anim: false,
             toggle_key: VK_HOME as i32,
+            craft_key: 186, // VK_OEM_1 (;:)
         }
     }
 }
@@ -208,6 +210,13 @@ pub fn load_config() {
             section_hotkeys.as_ptr(),
             to_wstring("ToggleKey").as_ptr(),
             VK_HOME as i32,
+            path_ptr,
+        );
+
+        new_config.craft_key = GetPrivateProfileIntW(
+            section_hotkeys.as_ptr(),
+            to_wstring("CraftKey").as_ptr(),
+            0,
             path_ptr,
         );
     }
