@@ -583,7 +583,7 @@ pub fn init_hooks() -> bool {
 
     scan_key!(
         craft_entry_partner_addr,
-        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 4D 89 CF 4C 89 C6 49 89 D4 49 89 CE"
+        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 4D 89 ? 4C 89 C6 49 89 D4 49 89 CE"
     );
     if !craft_entry_partner_addr.is_null() {
         CRAFT_ENTRY_PARTNER.store(craft_entry_partner_addr, Ordering::Relaxed);
