@@ -1,3 +1,7 @@
+//！ Acknowledgements:
+//！ - <https://github.com/DGP-Studio/UnlockerIsland>
+//！ - <https://github.com/isxlan0/Genshin.Fps.UnlockerIsland>
+
 use crate::config::get_config;
 use crate::hutao_seh::try_seh;
 use crate::scan_key;
