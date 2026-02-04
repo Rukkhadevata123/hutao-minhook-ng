@@ -10,10 +10,8 @@ use std::ffi::{c_char, c_void};
 use std::ptr;
 use std::sync::Once;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
-// =============================================================================================
-// IL2CPP Structures
-// =============================================================================================
 
+// IL2CPP Structures
 #[repr(C)]
 pub struct Il2CppObject {
     pub klass: *mut c_void,
@@ -27,9 +25,7 @@ pub struct Il2CppString {
     pub chars: [u16; 32],
 }
 
-// =============================================================================================
 // Global Function Pointers (Originals & Helpers)
-// =============================================================================================
 
 // Get_FrameCount
 static ORIGINAL_GET_FRAME_COUNT: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
@@ -71,9 +67,7 @@ static TOUCH_SCREEN_INIT: Once = Once::new();
 // Flag to request opening the craft menu from the main thread
 static REQUEST_OPEN_CRAFT: AtomicBool = AtomicBool::new(false);
 
-// =============================================================================================
 // Function Type Definitions
-// =============================================================================================
 
 // typedef int(*HookGet_FrameCount_t)();
 type GetFrameCountFn = unsafe extern "system" fn() -> i32;
@@ -113,8 +107,8 @@ type ShowOneDamageTextExFn = unsafe extern "system" fn(
     i32,
 );
 
-// typedef int(*HookDisplayFog_t)(__int64 a1, __int64 a2);
-type DisplayFogFn = unsafe extern "system" fn(*mut c_void, *mut c_void) -> i32;
+// typedef void (*HookDisplayFog_t)(bool);
+type DisplayFogFn = unsafe extern "system" fn(bool);
 
 // typedef void* (*HookPlayer_Perspective_t)(void* RCX, float Display, void* R8);
 type PlayerPerspectiveFn = unsafe extern "system" fn(*mut c_void, f32, *mut c_void) -> *mut c_void;
@@ -145,9 +139,7 @@ type OpenTeamFn = unsafe extern "system" fn();
 // typedef void(*OpenTeamPageAccordingly_t)(bool);
 type OpenTeamPageAccordinglyFn = unsafe extern "system" fn(bool);
 
-// =============================================================================================
 // Hook Implementations
-// =============================================================================================
 
 // Public helper to set the request flag
 pub fn request_open_craft() {
@@ -206,7 +198,7 @@ unsafe extern "system" fn hook_get_frame_count() -> i32 {
     }
 }
 
-unsafe extern "system" fn hook_touch_fps_fov(a1: *mut c_void, mut change_fov_value: f32) -> i32 {
+unsafe extern "system" fn hook_update_loop(a1: *mut c_void, mut change_fov_value: f32) -> i32 {
     unsafe {
         if !GAME_UPDATE_INIT.load(Ordering::Relaxed) {
             GAME_UPDATE_INIT.store(true, Ordering::Relaxed);
@@ -243,6 +235,15 @@ unsafe extern "system" fn hook_touch_fps_fov(a1: *mut c_void, mut change_fov_val
             }
         }
 
+        let display_fog_ptr = ORIGINAL_DISPLAY_FOG.load(Ordering::Relaxed);
+        if !display_fog_ptr.is_null() {
+            let display_fog: DisplayFogFn = std::mem::transmute(display_fog_ptr);
+
+            // If enable_display_fog_override is True, it means "Disable Fog" -> pass false
+            // If enable_display_fog_override is False, it means "Enable Fog" -> pass true
+            display_fog(!config.enable_display_fog_override);
+        }
+
         if change_fov_value > 30.0 && config.enable_fov_override {
             change_fov_value = config.fov_value;
         }
@@ -251,46 +252,6 @@ unsafe extern "system" fn hook_touch_fps_fov(a1: *mut c_void, mut change_fov_val
         if !original_ptr.is_null() {
             let original: ChangeFovFn = std::mem::transmute(original_ptr);
             original(a1, change_fov_value)
-        } else {
-            0
-        }
-    }
-}
-
-// Fake Fog Struct for alignment (64 bytes)
-#[repr(C, align(16))]
-struct FakeFogStruct([u8; 64]);
-static mut FAKE_FOG_STRUCT: FakeFogStruct = FakeFogStruct([0; 64]);
-
-unsafe extern "system" fn hook_display_fog(a1: *mut c_void, a2: *mut c_void) -> i32 {
-    unsafe {
-        let config = get_config();
-
-        let should_disable_fog = config.enable_display_fog_override;
-
-        if should_disable_fog && !a2.is_null() {
-            // Use addr_of_mut to get a stable pointer to FAKE_FOG_STRUCT
-            let fake_fog_ptr = ptr::addr_of_mut!(FAKE_FOG_STRUCT);
-            // Because the struct is #[repr(C)] and has only one field, casting to an u8 pointer is safe
-            let buffer_ptr = fake_fog_ptr as *mut u8;
-
-            // Copy memory from a2 to FAKE_FOG_STRUCT
-            ptr::copy_nonoverlapping(a2 as *const u8, buffer_ptr, 64);
-            // Set first byte to 0
-            *buffer_ptr = 0;
-
-            let original_ptr = ORIGINAL_DISPLAY_FOG.load(Ordering::Relaxed);
-            if !original_ptr.is_null() {
-                let original: DisplayFogFn = std::mem::transmute(original_ptr);
-                // Directly pass the raw pointer
-                return original(a1, fake_fog_ptr as *mut c_void);
-            }
-        }
-
-        let original_ptr = ORIGINAL_DISPLAY_FOG.load(Ordering::Relaxed);
-        if !original_ptr.is_null() {
-            let original: DisplayFogFn = std::mem::transmute(original_ptr);
-            original(a1, a2)
         } else {
             0
         }
@@ -464,9 +425,7 @@ unsafe extern "system" fn hook_open_team() {
     }
 }
 
-// =============================================================================================
 // Initialization
-// =============================================================================================
 
 pub fn init_hooks() -> bool {
     if min_hook_rs::initialize().is_err() {
@@ -502,7 +461,7 @@ pub fn init_hooks() -> bool {
         "40 53 48 83 EC 60 0F 29 74 24 ? 48 8B D9 0F 28 F1 E8 ? ? ? ? 48 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 48 8B C8 "
     );
     if !change_fov_addr.is_null()
-        && let Ok(trampoline) = create_hook(change_fov_addr, hook_touch_fps_fov as *mut c_void)
+        && let Ok(trampoline) = create_hook(change_fov_addr, hook_update_loop as *mut c_void)
     {
         ORIGINAL_CHANGE_FOV.store(trampoline, Ordering::Relaxed);
     }
@@ -579,12 +538,10 @@ pub fn init_hooks() -> bool {
     // DisplayFog
     scan_key!(
         display_fog_addr,
-        "0F B6 02 88 01 8B 42 04 89 41 04 F3 0F 10 52 ? F3 0F 10 4A ? F3 0F 10 42 ? 8B 42 08 "
+        "E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? C3 66 66 66 66 66 66 2E 0F 1F 84 00 ? ? ? ? 48 8B 41 ? C3 66 66 2E 0F 1F 84 00 ? ? ? ? 48 8B 41"
     );
-    if !display_fog_addr.is_null()
-        && let Ok(trampoline) = create_hook(display_fog_addr, hook_display_fog as *mut c_void)
-    {
-        ORIGINAL_DISPLAY_FOG.store(trampoline, Ordering::Relaxed);
+    if !display_fog_addr.is_null() {
+        ORIGINAL_DISPLAY_FOG.store(display_fog_addr, Ordering::Relaxed);
     }
 
     // Player_Perspective
