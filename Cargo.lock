@@ -24,9 +24,9 @@ checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 
 [[package]]
 name = "min_hook_rs"
-version = "2.1.1"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c026603004f69de4d777d6102b09b06a0b73a6b0b5a5a277943e69558e286b9b"
+checksum = "83f03335182923bf3ea9ad4cd8831020a4d51b348b624d37994623bfe6f2daea"
 dependencies = [
  "serde_json",
  "windows-sys",
