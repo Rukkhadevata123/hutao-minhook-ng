@@ -1,10 +1,11 @@
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::{OnceLock, RwLock};
 use windows_sys::Win32::Foundation::{HMODULE, MAX_PATH};
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 use windows_sys::Win32::System::WindowsProgramming::{
-    GetPrivateProfileIntW, GetPrivateProfileStringW, WritePrivateProfileStringW,
+    GetPrivateProfileIntW, GetPrivateProfileStringW,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_HOME;
 
@@ -61,6 +62,8 @@ pub static CONFIG: OnceLock<RwLock<Config>> = OnceLock::new();
 
 // Store the path to the config file
 static CONFIG_PATH: OnceLock<Vec<u16>> = OnceLock::new();
+static OFFSET_PATH: OnceLock<PathBuf> = OnceLock::new();
+static CURRENT_GAME_VERSION: OnceLock<RwLock<String>> = OnceLock::new();
 
 /// Initializes the configuration path based on the DLL location.
 pub fn setup_config_path(h_module: HMODULE) {
@@ -72,11 +75,13 @@ pub fn setup_config_path(h_module: HMODULE) {
             let path_buf = PathBuf::from(String::from_utf16_lossy(path_slice));
             if let Some(parent) = path_buf.parent() {
                 let config_path = parent.join("config.ini");
+                let offset_path = parent.join("offset.ini");
                 // Convert back to UTF-16 null-terminated vector for Windows APIs
                 let mut config_path_utf16: Vec<u16> =
                     config_path.to_string_lossy().encode_utf16().collect();
                 config_path_utf16.push(0);
                 CONFIG_PATH.set(config_path_utf16).ok();
+                OFFSET_PATH.set(offset_path).ok();
             }
         }
     }
@@ -85,6 +90,168 @@ pub fn setup_config_path(h_module: HMODULE) {
 /// Helper to convert Rust string to wide string (UTF-16)
 fn to_wstring(str: &str) -> Vec<u16> {
     str.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+fn read_ini_string(path_ptr: *const u16, section: &str, key: &str, default: &str) -> String {
+    let mut buf = vec![0u16; MAX_PATH as usize];
+
+    unsafe {
+        let len = GetPrivateProfileStringW(
+            to_wstring(section).as_ptr(),
+            to_wstring(key).as_ptr(),
+            to_wstring(default).as_ptr(),
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            path_ptr,
+        );
+
+        String::from_utf16_lossy(&buf[..len as usize])
+    }
+}
+
+fn parse_game_version(game_config_path: &Path) -> String {
+    let Ok(content) = fs::read_to_string(game_config_path) else {
+        return String::new();
+    };
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with('#') {
+            continue;
+        }
+
+        let Some((key, value)) = trimmed.split_once('=') else {
+            continue;
+        };
+
+        if key.trim().eq_ignore_ascii_case("game_version") {
+            let version = value.trim().trim_matches('"');
+            let mut parts = version.split('.');
+            let major = parts.next().unwrap_or_default();
+            let minor = parts.next().unwrap_or_default();
+
+            if major.is_empty() || minor.is_empty() {
+                return version.to_string();
+            }
+
+            return format!("{}.{}", major, minor);
+        }
+    }
+
+    String::new()
+}
+
+fn refresh_game_version(path_ptr: *const u16) {
+    let game_path = read_ini_string(path_ptr, "Settings", "GamePath", "");
+    let version = Path::new(&game_path)
+        .parent()
+        .map(|parent| parse_game_version(&parent.join("config.ini")))
+        .unwrap_or_default();
+
+    let version_lock = CURRENT_GAME_VERSION.get_or_init(|| RwLock::new(String::new()));
+    if let Ok(mut guard) = version_lock.write() {
+        *guard = version;
+    }
+}
+
+fn current_offset_section() -> String {
+    let version = CURRENT_GAME_VERSION
+        .get_or_init(|| RwLock::new(String::new()))
+        .read()
+        .map(|guard| guard.clone())
+        .unwrap_or_default();
+
+    if version.is_empty() {
+        "Offsets".to_string()
+    } else {
+        format!("{} Offsets", version)
+    }
+}
+
+fn parse_section_name(line: &str) -> Option<&str> {
+    let trimmed = line.trim();
+    trimmed.strip_prefix('[')?.strip_suffix(']')
+}
+
+fn read_offset_value(contents: &str, section: &str, key: &str) -> Option<String> {
+    let mut in_target_section = false;
+
+    for line in contents.lines() {
+        if let Some(name) = parse_section_name(line) {
+            in_target_section = name == section;
+            continue;
+        }
+
+        if !in_target_section {
+            continue;
+        }
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with('#') {
+            continue;
+        }
+
+        let Some((current_key, value)) = trimmed.split_once('=') else {
+            continue;
+        };
+
+        if current_key.trim() == key {
+            return Some(value.trim().to_string());
+        }
+    }
+
+    None
+}
+
+fn upsert_offset_value(contents: &str, section: &str, key: &str, value: &str) -> String {
+    let mut lines: Vec<String> = contents.lines().map(str::to_string).collect();
+    let mut section_start = None;
+    let mut section_end = lines.len();
+
+    for (index, line) in lines.iter().enumerate() {
+        let Some(name) = parse_section_name(line) else {
+            continue;
+        };
+
+        if section_start.is_none() {
+            if name == section {
+                section_start = Some(index);
+            }
+            continue;
+        }
+
+        section_end = index;
+        break;
+    }
+
+    if let Some(start) = section_start {
+        for index in (start + 1)..section_end {
+            let trimmed = lines[index].trim();
+            if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with('#') {
+                continue;
+            }
+
+            let Some((current_key, _)) = trimmed.split_once('=') else {
+                continue;
+            };
+
+            if current_key.trim() == key {
+                lines[index] = format!("{}={}", key, value);
+                return format!("{}\r\n", lines.join("\r\n"));
+            }
+        }
+
+        lines.insert(section_end, format!("{}={}", key, value));
+        return format!("{}\r\n", lines.join("\r\n"));
+    }
+
+    let mut new_lines = vec![format!("[{}]", section), format!("{}={}", key, value)];
+    if !lines.is_empty() {
+        new_lines.push(String::new());
+        new_lines.extend(lines);
+    }
+
+    format!("{}\r\n", new_lines.join("\r\n"))
 }
 
 /// Loads configuration from the INI file.
@@ -221,6 +388,8 @@ pub fn load_config() {
         );
     }
 
+    refresh_game_version(path_ptr);
+
     // Update the global config
     let config_lock = CONFIG.get_or_init(|| RwLock::new(Config::default()));
     if let Ok(mut write_guard) = config_lock.write() {
@@ -237,63 +406,52 @@ pub fn get_config() -> Config {
         .unwrap_or_default()
 }
 
-/// Reads a comma-separated list of hex addresses from the [Offsets] section for `key`.
+/// Reads a comma-separated list of hex addresses from the current version section for `key`.
 /// Returns a Vec<usize> of parsed absolute addresses (empty if none or on error).
 /// Values in INI are stored relative to module base (so they stay valid across ASLR).
 pub fn load_offsets(key: &str) -> Vec<usize> {
-    let path_ptr = match CONFIG_PATH.get() {
-        Some(p) => p.as_ptr(),
-        None => return Vec::new(),
+    let Some(path) = OFFSET_PATH.get() else {
+        return Vec::new();
     };
 
-    let mut buf: Vec<u16> = vec![0u16; 1024];
+    let Ok(contents) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
 
-    unsafe {
-        let section = to_wstring("Offsets");
-        let key_w = to_wstring(key);
-        let default = to_wstring("");
+    let section = current_offset_section();
+    let Some(value) = read_offset_value(&contents, &section, key) else {
+        return Vec::new();
+    };
 
-        let len = GetPrivateProfileStringW(
-            section.as_ptr(),
-            key_w.as_ptr(),
-            default.as_ptr(),
-            buf.as_mut_ptr(),
-            buf.len() as u32,
-            path_ptr,
-        );
+    let base = unsafe { GetModuleHandleW(ptr::null()) } as usize;
 
-        if len == 0 {
-            return Vec::new();
-        }
+    value
+        .split(',')
+        .filter_map(|part| {
+            let trimmed = part.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
 
-        let s = String::from_utf16_lossy(&buf[..len as usize]);
-        let base = GetModuleHandleW(ptr::null()) as usize;
-
-        s.split(',')
-            .filter_map(|part| {
-                let t = part.trim();
-                if t.is_empty() {
-                    return None;
-                }
-                let t = t.trim_start_matches("0x").trim_start_matches("0X");
-                usize::from_str_radix(t, 16)
-                    .ok()
-                    .map(|rel| base.wrapping_add(rel))
-            })
-            .collect()
-    }
+            let trimmed = trimmed.trim_start_matches("0x").trim_start_matches("0X");
+            usize::from_str_radix(trimmed, 16)
+                .ok()
+                .map(|rel| base.wrapping_add(rel))
+        })
+        .collect()
 }
 
-/// Writes a comma-separated list of hex addresses into the [Offsets] section under `key`.
+/// Writes a comma-separated list of hex addresses into the current version section under `key`.
 /// Returns true on success.
 /// Addresses are written relative to the module base (stable across ASLR).
 pub fn write_offsets(key: &str, addrs: &[usize]) -> bool {
-    let path_ptr = match CONFIG_PATH.get() {
-        Some(p) => p.as_ptr(),
+    let path = match OFFSET_PATH.get() {
+        Some(p) => p,
         None => return false,
     };
 
     let base = unsafe { GetModuleHandleW(ptr::null()) } as usize;
+    let section = current_offset_section();
 
     let joined = addrs
         .iter()
@@ -304,11 +462,8 @@ pub fn write_offsets(key: &str, addrs: &[usize]) -> bool {
         .collect::<Vec<_>>()
         .join(",");
 
-    let wide = to_wstring(&joined);
+    let current_contents = fs::read_to_string(path).unwrap_or_default();
+    let updated_contents = upsert_offset_value(&current_contents, &section, key, &joined);
 
-    unsafe {
-        let section = to_wstring("Offsets");
-        let key_w = to_wstring(key);
-        WritePrivateProfileStringW(section.as_ptr(), key_w.as_ptr(), wide.as_ptr(), path_ptr) != 0
-    }
+    fs::write(path, updated_contents).is_ok()
 }
