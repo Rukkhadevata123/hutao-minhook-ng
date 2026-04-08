@@ -13,30 +13,35 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 use windows_sys::core::BOOL;
 
 use crate::config::{get_config, load_config, setup_config_path};
-use crate::hooks::{init_hooks, is_game_update_init, request_open_craft};
+use crate::hooks::{
+    init_hooks, is_game_update_init, request_open_craft, request_update_uid_visibility,
+};
 
 /// The main worker thread function.
 /// Corresponds to the `Run` function in the C++ version.
 unsafe extern "system" fn run(h_module: *mut c_void) -> u32 {
     unsafe {
-        // 1. Setup config path based on DLL location
+        // Setup config path based on DLL location
         setup_config_path(h_module as HMODULE);
 
-        // 2. Load initial configuration
+        // Load initial configuration
         load_config();
 
-        // 3. Initialize Hooks (Scan patterns and create hooks)
+        // Initialize Hooks (Scan patterns and create hooks)
         if !init_hooks() {
             // Failed to initialize hooks (e.g., patterns not found)
             return 0;
         }
 
-        // 4. Wait for GameUpdate to be called (indicates game logic is running)
+        // Wait for GameUpdate to be called (indicates game logic is running)
         while !is_game_update_init() {
             Sleep(1000);
         }
 
-        // 5. Main loop for hotkey monitoring
+        // Update UID after the main game loop has started.
+        request_update_uid_visibility();
+
+        // Main loop for hotkey monitoring
         loop {
             let config = get_config();
 
@@ -44,6 +49,7 @@ unsafe extern "system" fn run(h_module: *mut c_void) -> u32 {
             // GetAsyncKeyState returns i16, bit 15 (0x8000) indicates the key is currently down.
             if (GetAsyncKeyState(config.toggle_key) as u16 & 0x8000) != 0 {
                 load_config();
+                request_update_uid_visibility();
                 // Simple debounce to prevent multiple reloads per press
                 Sleep(500);
             }

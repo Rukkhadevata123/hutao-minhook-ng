@@ -66,6 +66,7 @@ static GAME_UPDATE_INIT: AtomicBool = AtomicBool::new(false);
 static TOUCH_SCREEN_INIT: Once = Once::new();
 // Flag to request opening the craft menu from the main thread
 static REQUEST_OPEN_CRAFT: AtomicBool = AtomicBool::new(false);
+static REQUEST_UID_VISIBILITY_UPDATE: AtomicBool = AtomicBool::new(false);
 
 // Function Type Definitions
 
@@ -146,6 +147,10 @@ pub fn request_open_craft() {
     REQUEST_OPEN_CRAFT.store(true, Ordering::Relaxed);
 }
 
+pub fn request_update_uid_visibility() {
+    REQUEST_UID_VISIBILITY_UPDATE.store(true, Ordering::Relaxed);
+}
+
 // Internal helper to actually open the menu (must be called from main thread)
 // Returns true if successfully dispatched
 unsafe fn do_open_craft_menu() -> bool {
@@ -214,6 +219,31 @@ unsafe fn show_ui_element_by_path(path: &[u8]) -> bool {
     unsafe { set_ui_element_active_by_path(path, true) }
 }
 
+pub unsafe fn update_uid_visibility() {
+    unsafe {
+        let uid_path = b"/BetaWatermarkCanvas(Clone)/Panel/TxtUID\0";
+        if get_config().hide_uid {
+            let _ = hide_ui_element_by_path(uid_path);
+        } else {
+            let _ = show_ui_element_by_path(uid_path);
+        }
+    }
+}
+
+unsafe fn handle_main_thread_requests() {
+    unsafe {
+        if REQUEST_OPEN_CRAFT.load(Ordering::Relaxed) {
+            REQUEST_OPEN_CRAFT.store(false, Ordering::Relaxed);
+            do_open_craft_menu();
+        }
+
+        if REQUEST_UID_VISIBILITY_UPDATE.load(Ordering::Relaxed) {
+            REQUEST_UID_VISIBILITY_UPDATE.store(false, Ordering::Relaxed);
+            update_uid_visibility();
+        }
+    }
+}
+
 unsafe extern "system" fn hook_get_frame_count() -> i32 {
     unsafe {
         let original_ptr = ORIGINAL_GET_FRAME_COUNT.load(Ordering::Relaxed);
@@ -243,18 +273,7 @@ unsafe extern "system" fn hook_update_loop(a1: *mut c_void, mut change_fov_value
 
         let config = get_config();
 
-        // Check for craft menu request (Main Thread Execution)
-        if REQUEST_OPEN_CRAFT.load(Ordering::Relaxed) {
-            REQUEST_OPEN_CRAFT.store(false, Ordering::Relaxed);
-            // We don't care about the return value here, just do it
-            do_open_craft_menu();
-        }
-
-        if config.hide_uid {
-            let _ = hide_ui_element_by_path(b"/BetaWatermarkCanvas(Clone)/Panel/TxtUID\0");
-        } else {
-            let _ = show_ui_element_by_path(b"/BetaWatermarkCanvas(Clone)/Panel/TxtUID\0");
-        }
+        handle_main_thread_requests();
 
         TOUCH_SCREEN_INIT.call_once(|| {
             if config.use_touch_screen {
