@@ -177,7 +177,7 @@ unsafe fn do_open_craft_menu() -> bool {
     false
 }
 
-unsafe fn hide_ui_element_by_path(path: &[u8]) -> bool {
+unsafe fn set_ui_element_active_by_path(path: &[u8], active: bool) -> bool {
     unsafe {
         let find_string_ptr = FIND_STRING.load(Ordering::Relaxed);
         let find_game_object_ptr = FIND_GAME_OBJECT.load(Ordering::Relaxed);
@@ -201,9 +201,17 @@ unsafe fn hide_ui_element_by_path(path: &[u8]) -> bool {
             return false;
         }
 
-        set_active(game_object, false);
+        set_active(game_object, active);
         true
     }
+}
+
+unsafe fn hide_ui_element_by_path(path: &[u8]) -> bool {
+    unsafe { set_ui_element_active_by_path(path, false) }
+}
+
+unsafe fn show_ui_element_by_path(path: &[u8]) -> bool {
+    unsafe { set_ui_element_active_by_path(path, true) }
 }
 
 unsafe extern "system" fn hook_get_frame_count() -> i32 {
@@ -244,6 +252,8 @@ unsafe extern "system" fn hook_update_loop(a1: *mut c_void, mut change_fov_value
 
         if config.hide_uid {
             let _ = hide_ui_element_by_path(b"/BetaWatermarkCanvas(Clone)/Panel/TxtUID\0");
+        } else {
+            let _ = show_ui_element_by_path(b"/BetaWatermarkCanvas(Clone)/Panel/TxtUID\0");
         }
 
         TOUCH_SCREEN_INIT.call_once(|| {
