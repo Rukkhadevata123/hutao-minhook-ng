@@ -177,6 +177,35 @@ unsafe fn do_open_craft_menu() -> bool {
     false
 }
 
+unsafe fn hide_ui_element_by_path(path: &[u8]) -> bool {
+    unsafe {
+        let find_string_ptr = FIND_STRING.load(Ordering::Relaxed);
+        let find_game_object_ptr = FIND_GAME_OBJECT.load(Ordering::Relaxed);
+        let set_active_ptr = SET_ACTIVE.load(Ordering::Relaxed);
+
+        if find_string_ptr.is_null() || find_game_object_ptr.is_null() || set_active_ptr.is_null() {
+            return false;
+        }
+
+        let find_string: FindStringFn = std::mem::transmute(find_string_ptr);
+        let find_game_object: FindGameObjectFn = std::mem::transmute(find_game_object_ptr);
+        let set_active: SetActiveFn = std::mem::transmute(set_active_ptr);
+
+        let str_obj = find_string(path.as_ptr() as *const c_char);
+        if str_obj.is_null() {
+            return false;
+        }
+
+        let game_object = find_game_object(str_obj);
+        if game_object.is_null() {
+            return false;
+        }
+
+        set_active(game_object, false);
+        true
+    }
+}
+
 unsafe extern "system" fn hook_get_frame_count() -> i32 {
     unsafe {
         let original_ptr = ORIGINAL_GET_FRAME_COUNT.load(Ordering::Relaxed);
@@ -211,6 +240,10 @@ unsafe extern "system" fn hook_update_loop(a1: *mut c_void, mut change_fov_value
             REQUEST_OPEN_CRAFT.store(false, Ordering::Relaxed);
             // We don't care about the return value here, just do it
             do_open_craft_menu();
+        }
+
+        if config.hide_uid {
+            let _ = hide_ui_element_by_path(b"/BetaWatermarkCanvas(Clone)/Panel/TxtUID\0");
         }
 
         TOUCH_SCREEN_INIT.call_once(|| {
@@ -279,46 +312,16 @@ unsafe extern "system" fn hook_player_perspective(
     }
 }
 
-unsafe extern "system" fn hook_hide_something(p_this: *mut c_void) {
+unsafe extern "system" fn hook_setup_quest_banner(p_this: *mut c_void) {
     unsafe {
         let config = get_config();
 
-        let find_string_ptr = FIND_STRING.load(Ordering::Relaxed);
-        let find_game_object_ptr = FIND_GAME_OBJECT.load(Ordering::Relaxed);
-        let set_active_ptr = SET_ACTIVE.load(Ordering::Relaxed);
-
-        if !find_string_ptr.is_null()
-            && !find_game_object_ptr.is_null()
-            && !set_active_ptr.is_null()
+        if config.hide_quest_banner
+            && hide_ui_element_by_path(
+                b"Canvas/Pages/InLevelMapPage/GrpMap/GrpPointTips/Layout/QuestBanner\0",
+            )
         {
-            let find_string: FindStringFn = std::mem::transmute(find_string_ptr);
-            let find_game_object: FindGameObjectFn = std::mem::transmute(find_game_object_ptr);
-            let set_active: SetActiveFn = std::mem::transmute(set_active_ptr);
-
-            // Hide UID Logic
-            if config.hide_uid {
-                let s = b"/BetaWatermarkCanvas(Clone)/Panel/TxtUID\0";
-                let str_obj = find_string(s.as_ptr() as *const c_char);
-                if !str_obj.is_null() {
-                    let uid_obj = find_game_object(str_obj);
-                    if !uid_obj.is_null() {
-                        set_active(uid_obj, false);
-                    }
-                }
-            }
-
-            // Hide Quest Banner Logic
-            if config.hide_quest_banner {
-                let s = b"Canvas/Pages/InLevelMapPage/GrpMap/GrpPointTips/Layout/QuestBanner\0";
-                let str_obj = find_string(s.as_ptr() as *const c_char);
-                if !str_obj.is_null() {
-                    let banner = find_game_object(str_obj);
-                    if !banner.is_null() {
-                        set_active(banner, false);
-                        return;
-                    }
-                }
-            }
+            return;
         }
 
         let original_ptr = ORIGINAL_SETUP_QUEST_BANNER.load(Ordering::Relaxed);
@@ -481,8 +484,10 @@ pub fn init_hooks() -> bool {
         "41 57 41 56 56 57 55 53 48 81 EC ? ? ? ? 0F 29 BC 24 ? ? ? ? 0F 29 B4 24 ? ? ? ? 48 89 CE 80 3D ? ? ? ? 00 0F 85 ? ? ? ? 48 8B 96"
     );
     if !setup_quest_banner_addr.is_null()
-        && let Ok(trampoline) =
-            create_hook(setup_quest_banner_addr, hook_hide_something as *mut c_void)
+        && let Ok(trampoline) = create_hook(
+            setup_quest_banner_addr,
+            hook_setup_quest_banner as *mut c_void,
+        )
     {
         ORIGINAL_SETUP_QUEST_BANNER.store(trampoline, Ordering::Relaxed);
     }
