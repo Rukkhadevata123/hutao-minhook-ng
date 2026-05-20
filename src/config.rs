@@ -203,7 +203,33 @@ fn read_offset_value(contents: &str, section: &str, key: &str) -> Option<String>
     None
 }
 
+fn detect_line_ending(contents: &str) -> &'static str {
+    let bytes = contents.as_bytes();
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte == b'\n' {
+            return if index > 0 && bytes[index - 1] == b'\r' {
+                "\r\n"
+            } else {
+                "\n"
+            };
+        }
+    }
+
+    "\r\n"
+}
+
+fn join_lines(lines: &[String], line_ending: &str, trailing_line_ending: bool) -> String {
+    let mut contents = lines.join(line_ending);
+    if trailing_line_ending {
+        contents.push_str(line_ending);
+    }
+    contents
+}
+
 fn upsert_offset_value(contents: &str, section: &str, key: &str, value: &str) -> String {
+    let line_ending = detect_line_ending(contents);
+    let trailing_line_ending =
+        contents.is_empty() || contents.ends_with('\n') || contents.ends_with('\r');
     let mut lines: Vec<String> = contents.lines().map(str::to_string).collect();
     let mut section_start = None;
     let mut section_end = lines.len();
@@ -237,12 +263,17 @@ fn upsert_offset_value(contents: &str, section: &str, key: &str, value: &str) ->
 
             if current_key.trim() == key {
                 lines[index] = format!("{}={}", key, value);
-                return format!("{}\r\n", lines.join("\r\n"));
+                return join_lines(&lines, line_ending, trailing_line_ending);
             }
         }
 
-        lines.insert(section_end, format!("{}={}", key, value));
-        return format!("{}\r\n", lines.join("\r\n"));
+        let mut insert_at = section_end;
+        while insert_at > start + 1 && lines[insert_at - 1].trim().is_empty() {
+            insert_at -= 1;
+        }
+
+        lines.insert(insert_at, format!("{}={}", key, value));
+        return join_lines(&lines, line_ending, trailing_line_ending);
     }
 
     let mut new_lines = vec![format!("[{}]", section), format!("{}={}", key, value)];
@@ -251,7 +282,7 @@ fn upsert_offset_value(contents: &str, section: &str, key: &str, value: &str) ->
         new_lines.extend(lines);
     }
 
-    format!("{}\r\n", new_lines.join("\r\n"))
+    join_lines(&new_lines, line_ending, trailing_line_ending)
 }
 
 /// Loads configuration from the INI file.
