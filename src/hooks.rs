@@ -544,7 +544,7 @@ pub fn init_hooks() -> bool {
     // EventCameraMove
     scan_key!(
         event_camera_move_addr,
-        "41 57 41 56 56 57 55 53 48 83 EC ? 48 89 D7 49 89 CE 80 3D ? ? ? ? 00 0F 85 ? ? ? ? 80 3D ? ? ? ? 00"
+        "41 57 41 56 56 57 55 53 48 83 EC ? 48 89 D7 48 89 CE 80 3D ? ? ? ? ? 0F 85 ? ? ? ? 48 89 F1 E8 ? ? ? ? 84 C0"
     );
     if !event_camera_move_addr.is_null()
         && let Ok(trampoline) = create_hook(
