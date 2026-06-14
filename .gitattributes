@@ -1,0 +1,8 @@
+* text=auto
+
+.gitattributes text eol=crlf
+.gitignore text eol=crlf
+LICENSE text eol=crlf
+
+*.rs text eol=crlf
+*.c text eol=crlf

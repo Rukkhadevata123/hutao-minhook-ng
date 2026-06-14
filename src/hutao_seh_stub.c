@@ -31,7 +31,6 @@ uint32_t __hutao_seh_HandlerStub(
         Result = MS_CATCHED;
         if (Exception != NULL)
         {
-            // Use GetExceptionCode() instead of Record->ExceptionCode as it is more reliable.
             Exception->Code = Code;
             Exception->Address = Pointers->ExceptionRecord->ExceptionAddress;
         }

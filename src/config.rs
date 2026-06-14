@@ -7,7 +7,7 @@ use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHan
 use windows_sys::Win32::System::WindowsProgramming::{
     GetPrivateProfileIntW, GetPrivateProfileStringW,
 };
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_HOME;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{VK_HOME, VK_OEM_1};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -52,20 +52,17 @@ impl Default for Config {
             enable_redirect_craft_override: false,
             enable_remove_team_anim: false,
             toggle_key: VK_HOME as i32,
-            craft_key: 186, // VK_OEM_1 (;:)
+            craft_key: VK_OEM_1 as i32,
         }
     }
 }
 
-// Global configuration instance protected by a Read-Write Lock
 pub static CONFIG: OnceLock<RwLock<Config>> = OnceLock::new();
 
-// Store the path to the config file
 static CONFIG_PATH: OnceLock<Vec<u16>> = OnceLock::new();
 static OFFSET_PATH: OnceLock<PathBuf> = OnceLock::new();
 static CURRENT_GAME_VERSION: OnceLock<RwLock<String>> = OnceLock::new();
 
-/// Initializes the configuration path based on the DLL location.
 pub fn setup_config_path(h_module: HMODULE) {
     unsafe {
         let mut path = [0u16; MAX_PATH as usize];
@@ -76,7 +73,6 @@ pub fn setup_config_path(h_module: HMODULE) {
             if let Some(parent) = path_buf.parent() {
                 let config_path = parent.join("config.ini");
                 let offset_path = parent.join("offset.ini");
-                // Convert back to UTF-16 null-terminated vector for Windows APIs
                 let mut config_path_utf16: Vec<u16> =
                     config_path.to_string_lossy().encode_utf16().collect();
                 config_path_utf16.push(0);
@@ -87,7 +83,6 @@ pub fn setup_config_path(h_module: HMODULE) {
     }
 }
 
-/// Helper to convert Rust string to wide string (UTF-16)
 fn to_wstring(str: &str) -> Vec<u16> {
     str.encode_utf16().chain(std::iter::once(0)).collect()
 }
@@ -285,7 +280,6 @@ fn upsert_offset_value(contents: &str, section: &str, key: &str, value: &str) ->
     join_lines(&new_lines, line_ending, trailing_line_ending)
 }
 
-/// Loads configuration from the INI file.
 #[allow(non_snake_case)]
 pub fn load_config() {
     let path_ptr = match CONFIG_PATH.get() {
@@ -421,14 +415,12 @@ pub fn load_config() {
 
     refresh_game_version(path_ptr);
 
-    // Update the global config
     let config_lock = CONFIG.get_or_init(|| RwLock::new(Config::default()));
     if let Ok(mut write_guard) = config_lock.write() {
         *write_guard = new_config;
     }
 }
 
-/// Helper to get a copy of the current configuration
 pub fn get_config() -> Config {
     CONFIG
         .get_or_init(|| RwLock::new(Config::default()))
@@ -437,9 +429,6 @@ pub fn get_config() -> Config {
         .unwrap_or_default()
 }
 
-/// Reads a comma-separated list of hex addresses from the current version section for `key`.
-/// Returns a Vec<usize> of parsed absolute addresses (empty if none or on error).
-/// Values in INI are stored relative to module base (so they stay valid across ASLR).
 pub fn load_offsets(key: &str) -> Vec<usize> {
     let Some(path) = OFFSET_PATH.get() else {
         return Vec::new();
@@ -472,9 +461,6 @@ pub fn load_offsets(key: &str) -> Vec<usize> {
         .collect()
 }
 
-/// Writes a comma-separated list of hex addresses into the current version section under `key`.
-/// Returns true on success.
-/// Addresses are written relative to the module base (stable across ASLR).
 pub fn write_offsets(key: &str, addrs: &[usize]) -> bool {
     let path = match OFFSET_PATH.get() {
         Some(p) => p,
