@@ -7,8 +7,29 @@ use crate::{
 };
 use std::ffi::c_void;
 use windows_sys::Win32::{
-    Foundation::HMODULE, System::Threading::Sleep, UI::Input::KeyboardAndMouse::GetAsyncKeyState,
+    Foundation::HMODULE,
+    System::Threading::{GetCurrentProcessId, Sleep},
+    UI::{
+        Input::KeyboardAndMouse::GetAsyncKeyState,
+        WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId},
+    },
 };
+
+fn is_game_foreground() -> bool {
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_null() {
+            return false;
+        }
+
+        let mut foreground_process_id = 0;
+        if GetWindowThreadProcessId(hwnd, &mut foreground_process_id) == 0 {
+            return false;
+        }
+
+        foreground_process_id == GetCurrentProcessId()
+    }
+}
 
 pub unsafe extern "system" fn run(h_module: *mut c_void) -> u32 {
     unsafe {
@@ -34,7 +55,10 @@ pub unsafe extern "system" fn run(h_module: *mut c_void) -> u32 {
                 Sleep(500);
             }
 
-            if config.craft_key != 0 && (GetAsyncKeyState(config.craft_key) as u16 & 0x8000) != 0 {
+            if config.craft_key != 0
+                && is_game_foreground()
+                && (GetAsyncKeyState(config.craft_key) as u16 & 0x8000) != 0
+            {
                 commands::request(Command::OpenCraft);
                 Sleep(500);
             }
