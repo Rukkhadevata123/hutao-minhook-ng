@@ -32,6 +32,7 @@ pub type CraftEntryPartnerFn = unsafe extern "system" fn(
     *mut c_void,
     *mut c_void,
 ) -> bool;
+pub type CheckCanOpenMapFn = unsafe extern "system" fn(*mut c_void) -> bool;
 pub type CheckCanEnterFn = unsafe extern "system" fn() -> bool;
 pub type OpenTeamFn = unsafe extern "system" fn();
 pub type OpenTeamPageAccordinglyFn = unsafe extern "system" fn(bool);

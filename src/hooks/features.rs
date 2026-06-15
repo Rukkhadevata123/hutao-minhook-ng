@@ -183,10 +183,13 @@ static FEATURES: [Feature; 11] = [
         &[CheckCanEnter, OpenTeamPage],
     ),
     Feature::with_command(
-        &[Hook::new(
-            CraftEntry,
-            actions::hook_craft_entry as *mut c_void,
-        )],
+        &[
+            Hook::new(CraftEntry, actions::hook_craft_entry as *mut c_void),
+            Hook::new(
+                CheckCanOpenMap,
+                actions::hook_check_can_open_map as *mut c_void,
+            ),
+        ],
         &[FindString, CraftEntryPartner],
         actions::on_craft_command,
     ),

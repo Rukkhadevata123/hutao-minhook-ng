@@ -8,6 +8,15 @@ pub unsafe fn open_synthesis_page() -> bool {
     unsafe { functions::open_synthesis_page() }
 }
 
+pub unsafe extern "system" fn hook_check_can_open_map(p_this: *mut c_void) -> bool {
+    let config = crate::config::get_config();
+    if config.enable_redirect_craft_override {
+        return false;
+    }
+
+    unsafe { functions::original_check_can_open_map(p_this) }.unwrap_or(false)
+}
+
 pub unsafe extern "system" fn hook_craft_entry(p_this: *mut c_void) {
     let config = crate::config::get_config();
 

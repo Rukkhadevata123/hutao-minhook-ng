@@ -1,8 +1,8 @@
 use crate::game::{
     abi::{
-        ChangeFovFn, CheckCanEnterFn, CraftEntryFn, CraftEntryPartnerFn, DisplayFogFn,
-        EventCameraMoveFn, FindGameObjectFn, FindStringFn, GetFrameCountFn, OpenTeamFn,
-        OpenTeamPageAccordinglyFn, PlayerPerspectiveFn, SetActiveFn, SetFrameCountFn,
+        ChangeFovFn, CheckCanEnterFn, CheckCanOpenMapFn, CraftEntryFn, CraftEntryPartnerFn,
+        DisplayFogFn, EventCameraMoveFn, FindGameObjectFn, FindStringFn, GetFrameCountFn,
+        OpenTeamFn, OpenTeamPageAccordinglyFn, PlayerPerspectiveFn, SetActiveFn, SetFrameCountFn,
         SetupQuestBannerFn, ShowDamageTextFn, SwitchInputDeviceToTouchScreenFn,
     },
     il2cpp::Il2CppString,
@@ -145,6 +145,16 @@ pub unsafe fn original_craft_entry(p_this: *mut c_void) -> bool {
     let original: CraftEntryFn = unsafe { std::mem::transmute(ptr) };
     unsafe { original(p_this) };
     true
+}
+
+pub unsafe fn original_check_can_open_map(p_this: *mut c_void) -> Option<bool> {
+    let ptr = state::original(GameFunction::CheckCanOpenMap);
+    if ptr.is_null() {
+        return None;
+    }
+
+    let original: CheckCanOpenMapFn = unsafe { std::mem::transmute(ptr) };
+    Some(unsafe { original(p_this) })
 }
 
 pub unsafe fn original_open_team() -> bool {
