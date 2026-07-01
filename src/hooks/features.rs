@@ -124,7 +124,10 @@ impl Registry {
             }
         }
 
-        Self { features, inventory }
+        Self {
+            features,
+            inventory,
+        }
     }
 
     pub fn features(&self) -> &'static [Feature] {

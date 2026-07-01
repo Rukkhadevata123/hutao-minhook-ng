@@ -1,6 +1,6 @@
 use crate::{
     config::{Config, get_config},
-    hooks::{features::GameContext, registry, commands, state},
+    hooks::{commands, features::GameContext, registry, state},
 };
 
 pub unsafe fn dispatch() -> Config {

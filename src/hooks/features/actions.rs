@@ -1,6 +1,6 @@
 use crate::{
     game::functions,
-    hooks::{features::GameContext, commands::Command},
+    hooks::{commands::Command, features::GameContext},
 };
 use std::ffi::c_void;
 
