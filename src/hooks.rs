@@ -510,7 +510,7 @@ pub fn init_hooks() -> bool {
     // SetupQuestBanner
     scan_key!(
         setup_quest_banner_addr,
-        "41 57 41 56 56 57 55 53 48 81 EC ? ? ? ? 0F 29 BC 24 ? ? ? ? 0F 29 B4 24 ? ? ? ? 48 89 CE 80 3D ? ? ? ? 00 0F 85 ? ? ? ? 48 8B 96"
+        "41 57 41 56 56 57 55 53 48 81 EC ? ? ? ? 0F 29 BC 24 ? ? ? ? 0F 29 B4 24 ? ? ? ? 48 89 CE 80 3D ? ? ? ? 00 0F 85"
     );
     if !setup_quest_banner_addr.is_null()
         && let Ok(trampoline) = create_hook(
@@ -544,7 +544,7 @@ pub fn init_hooks() -> bool {
     // EventCameraMove
     scan_key!(
         event_camera_move_addr,
-        "41 57 41 56 56 57 55 53 48 83 EC ? 48 89 D7 48 89 CE 80 3D ? ? ? ? ? 0F 85 ? ? ? ? 48 89 F1 E8 ? ? ? ? 84 C0"
+        "41 57 41 56 56 57 55 53 48 83 EC ? 48 89 D7 48 89 CE 80 3D ? ? ? ? ? 0F 85 ? ? ? ? 48 89 F1 E8"
     );
     if !event_camera_move_addr.is_null()
         && let Ok(trampoline) = create_hook(
@@ -558,7 +558,7 @@ pub fn init_hooks() -> bool {
     // ShowOneDamageTextEx
     scan_key!(
         show_one_damage_text_ex_addr,
-        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 44 0F 29 9C 24 ? ? ? ? 44 0F 29 94 24 ? ? ? ? 44 0F 29 8C 24 ? ? ? ? 44 0F 29 84 24 ? ? ? ? 0F 29 BC 24 ? ? ? ? 0F 29 B4 24 ? ? ? ? 44 89 CF 45 89 C4"
+        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 44 0F 29 9C 24 ? ? ? ? 44 0F 29 94 24 ? ? ? ? 44 0F 29 8C 24 ? ? ? ? 44 0F 29 84 24 ? ? ? ? 0F 29 BC 24 ? ? ? ? 0F 29 B4 24 ? ? ? ? 44 89 CF"
     );
     if !show_one_damage_text_ex_addr.is_null()
         && let Ok(trampoline) = create_hook(
@@ -572,7 +572,7 @@ pub fn init_hooks() -> bool {
     // DisplayFog
     scan_key!(
         display_fog_addr,
-        "E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? C3 66 66 66 66 66 66 2E 0F 1F 84 00 ? ? ? ? 48 8B 41 ? C3 66 66 2E 0F 1F 84 00 ? ? ? ? 48 8B 41"
+        "E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? E9 ? ? ? ? 66 66 2E 0F 1F 84 00 ? ? ? ? C3 66 66 66 66 66 66 2E 0F 1F 84 00 ? ? ? ? 48 8B 41 ? C3 66 66 2E 0F 1F 84 00 ? ? ? ? 48 8B 41 ? C3 66 66 2E 0F 1F 84 00 ? ? ? ? 8B 41 ?"
     );
     if !display_fog_addr.is_null() {
         ORIGINAL_DISPLAY_FOG.store(display_fog_addr, Ordering::Relaxed);
