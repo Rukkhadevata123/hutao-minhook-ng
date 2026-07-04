@@ -47,16 +47,38 @@ impl Hook {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FeatureId {
+    PumpDriver,
+    ShowDamageText,
+    EventCamera,
+    Team,
+    Craft,
+    Uid,
+    QuestBanner,
+    Perspective,
+    TouchScreen,
+    FrameRate,
+    Fog,
+    Fov,
+}
+
 #[derive(Clone, Copy)]
 pub struct Feature {
+    pub id: FeatureId,
     pub hooks: &'static [Hook],
     pub helpers: &'static [GameFunction],
     pub callbacks: FeatureCallbacks,
 }
 
 impl Feature {
-    pub const fn new(hooks: &'static [Hook], helpers: &'static [GameFunction]) -> Self {
+    pub const fn new(
+        id: FeatureId,
+        hooks: &'static [Hook],
+        helpers: &'static [GameFunction],
+    ) -> Self {
         Self {
+            id,
             hooks,
             helpers,
             callbacks: FeatureCallbacks {
@@ -67,11 +89,13 @@ impl Feature {
     }
 
     pub const fn with_update(
+        id: FeatureId,
         hooks: &'static [Hook],
         helpers: &'static [GameFunction],
         on_game_thread_pump: GameThreadPumpFn,
     ) -> Self {
         Self {
+            id,
             hooks,
             helpers,
             callbacks: FeatureCallbacks {
@@ -82,11 +106,13 @@ impl Feature {
     }
 
     pub const fn with_command(
+        id: FeatureId,
         hooks: &'static [Hook],
         helpers: &'static [GameFunction],
         on_runtime_command: CommandFn,
     ) -> Self {
         Self {
+            id,
             hooks,
             helpers,
             callbacks: FeatureCallbacks {
@@ -115,6 +141,10 @@ pub struct Registry {
 
 impl Registry {
     pub fn new(features: &'static [Feature]) -> Self {
+        debug_assert!(features.iter().enumerate().all(|(index, feature)| {
+            !features[..index].iter().any(|prev| prev.id == feature.id)
+        }));
+
         let mut inventory: Vec<RequirementEntry> = Vec::new();
         for feature in features {
             for hook in feature.hooks {
@@ -170,6 +200,7 @@ pub struct GameContext<'a> {
 static FEATURES: [Feature; 12] = [
     // Always-on pump driver.
     Feature::new(
+        FeatureId::PumpDriver,
         &[Hook::new(
             CameraBrainFlush,
             pump::hook_camera_brain_flush as *mut c_void,
@@ -177,6 +208,7 @@ static FEATURES: [Feature; 12] = [
         &[],
     ),
     Feature::new(
+        FeatureId::ShowDamageText,
         &[Hook::new(
             ShowDamageText,
             ui::hook_show_damage_text as *mut c_void,
@@ -184,6 +216,7 @@ static FEATURES: [Feature; 12] = [
         &[],
     ),
     Feature::new(
+        FeatureId::EventCamera,
         &[Hook::new(
             EventCameraMove,
             ui::hook_event_camera_move as *mut c_void,
@@ -191,10 +224,12 @@ static FEATURES: [Feature; 12] = [
         &[],
     ),
     Feature::new(
+        FeatureId::Team,
         &[Hook::new(OpenTeam, actions::hook_open_team as *mut c_void)],
         &[CheckCanEnter, OpenTeamPage],
     ),
     Feature::with_command(
+        FeatureId::Craft,
         &[
             Hook::new(CraftEntry, actions::hook_craft_entry as *mut c_void),
             Hook::new(
@@ -206,11 +241,13 @@ static FEATURES: [Feature; 12] = [
         actions::on_craft_command,
     ),
     Feature::with_command(
+        FeatureId::Uid,
         &[],
         &[FindString, FindGameObject, SetActive],
         ui::on_uid_command,
     ),
     Feature::new(
+        FeatureId::QuestBanner,
         &[Hook::new(
             SetupQuestBanner,
             ui::hook_setup_quest_banner as *mut c_void,
@@ -218,14 +255,21 @@ static FEATURES: [Feature; 12] = [
         &[FindString, FindGameObject, SetActive],
     ),
     Feature::new(
+        FeatureId::Perspective,
         &[Hook::new(
             PlayerPerspective,
             ui::hook_player_perspective as *mut c_void,
         )],
         &[],
     ),
-    Feature::with_update(&[], &[SwitchInputDevice], display::update_touch_screen),
     Feature::with_update(
+        FeatureId::TouchScreen,
+        &[],
+        &[SwitchInputDevice],
+        display::update_touch_screen,
+    ),
+    Feature::with_update(
+        FeatureId::FrameRate,
         &[Hook::new(
             GetFrameCount,
             display::hook_get_frame_count as *mut c_void,
@@ -233,8 +277,9 @@ static FEATURES: [Feature; 12] = [
         &[SetFrameCount],
         display::update_frame_rate,
     ),
-    Feature::with_update(&[], &[DisplayFog], display::update_fog),
+    Feature::with_update(FeatureId::Fog, &[], &[DisplayFog], display::update_fog),
     Feature::new(
+        FeatureId::Fov,
         &[Hook::new(
             ChangeFov,
             display::hook_change_fov as *mut c_void,
