@@ -4,6 +4,7 @@ use std::ffi::{c_char, c_void};
 pub type GetFrameCountFn = unsafe extern "system" fn() -> i32;
 pub type SetFrameCountFn = unsafe extern "system" fn(i32) -> i32;
 pub type ChangeFovFn = unsafe extern "system" fn(*mut c_void, f32) -> i32;
+pub type CameraBrainFlushFn = unsafe extern "system" fn(*mut c_void) -> i64;
 pub type SwitchInputDeviceToTouchScreenFn = unsafe extern "system" fn(*mut c_void);
 pub type SetupQuestBannerFn = unsafe extern "system" fn(*mut c_void);
 pub type FindGameObjectFn = unsafe extern "system" fn(*mut Il2CppString) -> *mut c_void;

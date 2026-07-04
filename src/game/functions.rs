@@ -1,9 +1,9 @@
 use crate::game::{
     abi::{
-        ChangeFovFn, CheckCanEnterFn, CheckCanOpenMapFn, CraftEntryFn, CraftEntryPartnerFn,
-        DisplayFogFn, EventCameraMoveFn, FindGameObjectFn, FindStringFn, GetFrameCountFn,
-        OpenTeamFn, OpenTeamPageAccordinglyFn, PlayerPerspectiveFn, SetActiveFn, SetFrameCountFn,
-        SetupQuestBannerFn, ShowDamageTextFn, SwitchInputDeviceToTouchScreenFn,
+        CameraBrainFlushFn, ChangeFovFn, CheckCanEnterFn, CheckCanOpenMapFn, CraftEntryFn,
+        CraftEntryPartnerFn, DisplayFogFn, EventCameraMoveFn, FindGameObjectFn, FindStringFn,
+        GetFrameCountFn, OpenTeamFn, OpenTeamPageAccordinglyFn, PlayerPerspectiveFn, SetActiveFn,
+        SetFrameCountFn, SetupQuestBannerFn, ShowDamageTextFn, SwitchInputDeviceToTouchScreenFn,
     },
     il2cpp::Il2CppString,
 };
@@ -41,6 +41,16 @@ pub unsafe fn original_change_fov(a1: *mut c_void, value: f32) -> Option<i32> {
 
     let original: ChangeFovFn = unsafe { std::mem::transmute(ptr) };
     Some(unsafe { original(a1, value) })
+}
+
+pub unsafe fn original_camera_brain_flush(a1: *mut c_void) -> Option<i64> {
+    let ptr = state::original(GameFunction::CameraBrainFlush);
+    if ptr.is_null() {
+        return None;
+    }
+
+    let original: CameraBrainFlushFn = unsafe { std::mem::transmute(ptr) };
+    Some(unsafe { original(a1) })
 }
 
 pub unsafe fn set_fog_visible(visible: bool) -> bool {

@@ -6,6 +6,7 @@ use crate::{
     config::Config,
     hooks::{
         commands::Command,
+        pump,
         signatures::{GameFunction, GameFunction::*},
     },
 };
@@ -166,7 +167,15 @@ pub struct GameContext<'a> {
     pub config: &'a Config,
 }
 
-static FEATURES: [Feature; 11] = [
+static FEATURES: [Feature; 12] = [
+    // Always-on pump driver.
+    Feature::new(
+        &[Hook::new(
+            CameraBrainFlush,
+            pump::hook_camera_brain_flush as *mut c_void,
+        )],
+        &[],
+    ),
     Feature::new(
         &[Hook::new(
             ShowDamageText,

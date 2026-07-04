@@ -1,7 +1,4 @@
-use crate::{
-    game::functions,
-    hooks::{features::GameContext, pump},
-};
+use crate::{game::functions, hooks::features::GameContext};
 use std::{ffi::c_void, sync::Once};
 
 static TOUCH_SCREEN_INIT: Once = Once::new();
@@ -23,7 +20,7 @@ pub unsafe extern "system" fn hook_get_frame_count() -> i32 {
 }
 
 pub unsafe extern "system" fn hook_change_fov(a1: *mut c_void, mut change_fov_value: f32) -> i32 {
-    let config = unsafe { pump::dispatch() };
+    let config = crate::config::get_config();
 
     if change_fov_value > 30.0 && config.enable_fov_override {
         change_fov_value = config.fov_value;

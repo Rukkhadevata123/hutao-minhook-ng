@@ -1,9 +1,11 @@
 use crate::{
-    config::{Config, get_config},
+    config::get_config,
+    game::functions,
     hooks::{commands, features::GameContext, registry, state},
 };
+use std::ffi::c_void;
 
-pub unsafe fn dispatch() -> Config {
+pub unsafe fn dispatch() {
     state::mark_game_update_ready();
 
     let config = get_config();
@@ -17,6 +19,10 @@ pub unsafe fn dispatch() -> Config {
             unsafe { on_game_thread_pump(&mut ctx) };
         }
     }
+}
 
-    config
+/// Per-frame game-thread pump driver.
+pub unsafe extern "system" fn hook_camera_brain_flush(a1: *mut c_void) -> i64 {
+    unsafe { dispatch() };
+    unsafe { functions::original_camera_brain_flush(a1) }.unwrap_or(0)
 }
