@@ -4,6 +4,7 @@ use crate::{
         self,
         commands::{self, Command},
     },
+    logger,
 };
 use std::ffi::c_void;
 use windows_sys::Win32::{
@@ -34,7 +35,9 @@ fn is_game_foreground() -> bool {
 pub unsafe extern "system" fn run(h_module: *mut c_void) -> u32 {
     unsafe {
         setup_config_path(h_module as HMODULE);
+        logger::setup_path(h_module as HMODULE);
         load_config();
+        logger::start_session();
 
         if !hooks::install() {
             return 0;
@@ -43,6 +46,7 @@ pub unsafe extern "system" fn run(h_module: *mut c_void) -> u32 {
         while !hooks::is_game_update_ready() {
             Sleep(1000);
         }
+        logger::debug!("runtime: game update ready");
 
         commands::request(Command::UpdateUidVisibility);
 
@@ -51,6 +55,7 @@ pub unsafe extern "system" fn run(h_module: *mut c_void) -> u32 {
 
             if (GetAsyncKeyState(config.toggle_key) as u16 & 0x8000) != 0 {
                 load_config();
+                logger::debug!("config: reload");
                 commands::request(Command::UpdateUidVisibility);
                 Sleep(500);
             }

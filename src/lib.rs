@@ -2,6 +2,7 @@ mod config;
 mod game;
 mod hooks;
 mod hutao_seh;
+mod logger;
 mod runtime;
 mod scanner;
 

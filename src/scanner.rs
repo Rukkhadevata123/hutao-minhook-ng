@@ -29,9 +29,12 @@ impl ScanSession {
         pattern: &str,
         resolve_times: u8,
     ) -> Option<*mut c_void> {
-        let cfg_addrs = crate::config::load_offsets(key);
-        if !cfg_addrs.is_empty() {
-            return Some(cfg_addrs[0] as *mut c_void);
+        let debug_mode = crate::config::get_config().debug_mode;
+        if !debug_mode {
+            let cfg_addrs = crate::config::load_offsets(key);
+            if !cfg_addrs.is_empty() {
+                return Some(cfg_addrs[0] as *mut c_void);
+            }
         }
 
         let matches = self.scan_limit(pattern, 10);
@@ -66,7 +69,9 @@ impl ScanSession {
         }
 
         if !resolved_vec.is_empty() {
-            let _ = crate::config::write_offsets(key, &resolved_vec);
+            if !debug_mode {
+                let _ = crate::config::write_offsets(key, &resolved_vec);
+            }
             return Some(resolved_vec[0] as *mut c_void);
         }
 

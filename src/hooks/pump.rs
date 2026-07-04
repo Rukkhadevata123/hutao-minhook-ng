@@ -2,11 +2,20 @@ use crate::{
     config::get_config,
     game::functions,
     hooks::{commands, features::GameContext, registry, state},
+    logger,
 };
-use std::ffi::c_void;
+use std::{
+    ffi::c_void,
+    sync::atomic::{AtomicBool, Ordering},
+};
+
+static FIRST_PUMP_LOGGED: AtomicBool = AtomicBool::new(false);
 
 pub unsafe fn dispatch() {
     state::mark_game_update_ready();
+    if !FIRST_PUMP_LOGGED.swap(true, Ordering::Relaxed) {
+        logger::debug!("pump: first tick");
+    }
 
     let config = get_config();
     let mut ctx = GameContext { config: &config };
