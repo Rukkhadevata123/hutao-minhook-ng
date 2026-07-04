@@ -135,18 +135,18 @@ pub struct RequirementEntry {
 }
 
 pub struct Registry {
-    features: &'static [Feature],
+    features: Vec<Feature>,
     inventory: Vec<RequirementEntry>,
 }
 
 impl Registry {
-    pub fn new(features: &'static [Feature]) -> Self {
+    pub fn new(features: Vec<Feature>) -> Self {
         debug_assert!(features.iter().enumerate().all(|(index, feature)| {
             !features[..index].iter().any(|prev| prev.id == feature.id)
         }));
 
         let mut inventory: Vec<RequirementEntry> = Vec::new();
-        for feature in features {
+        for feature in &features {
             for hook in feature.hooks {
                 merge_requirement(&mut inventory, hook.function, RequirementKind::Hook);
             }
@@ -161,8 +161,8 @@ impl Registry {
         }
     }
 
-    pub fn features(&self) -> &'static [Feature] {
-        self.features
+    pub fn features(&self) -> &[Feature] {
+        &self.features
     }
 
     pub fn inventory(&self) -> &[RequirementEntry] {
@@ -288,6 +288,31 @@ static FEATURES: [Feature; 12] = [
     ),
 ];
 
-pub fn all() -> &'static [Feature] {
-    &FEATURES
+pub fn active_features(config: &Config) -> Vec<Feature> {
+    FEATURES
+        .iter()
+        .copied()
+        .filter(|feature| feature_enabled(feature.id, config))
+        .collect()
+}
+
+fn feature_enabled(id: FeatureId, config: &Config) -> bool {
+    if !config.disable_hot_reload {
+        return true;
+    }
+
+    match id {
+        FeatureId::PumpDriver => true,
+        FeatureId::ShowDamageText => config.disable_show_damage_text,
+        FeatureId::EventCamera => config.disable_event_camera_move,
+        FeatureId::Team => config.enable_remove_team_anim,
+        FeatureId::Craft => config.enable_redirect_craft_override,
+        FeatureId::Uid => config.hide_uid,
+        FeatureId::QuestBanner => config.hide_quest_banner,
+        FeatureId::Perspective => config.enable_perspective_override,
+        FeatureId::TouchScreen => config.use_touch_screen,
+        FeatureId::FrameRate => config.enable_fps_override,
+        FeatureId::Fog => config.enable_display_fog_override,
+        FeatureId::Fov => config.enable_fov_override,
+    }
 }

@@ -17,6 +17,7 @@ pub struct Config {
     pub enable_fov_override: bool,
     pub fov_value: f32,
     pub use_touch_screen: bool,
+    pub disable_hot_reload: bool,
 
     // Visuals
     pub enable_display_fog_override: bool,
@@ -43,6 +44,7 @@ impl Default for Config {
             enable_fov_override: false,
             fov_value: 60.0,
             use_touch_screen: false,
+            disable_hot_reload: false,
             enable_display_fog_override: false,
             enable_perspective_override: false,
             hide_quest_banner: false,
@@ -320,6 +322,13 @@ pub fn load_config() {
         new_config.use_touch_screen = GetPrivateProfileIntW(
             section_settings.as_ptr(),
             to_wstring("UseTouchScreen").as_ptr(),
+            0,
+            path_ptr,
+        ) != 0;
+
+        new_config.disable_hot_reload = GetPrivateProfileIntW(
+            section_settings.as_ptr(),
+            to_wstring("DisableHotReload").as_ptr(),
             0,
             path_ptr,
         ) != 0;

@@ -8,7 +8,10 @@ use std::sync::OnceLock;
 static FEATURE_REGISTRY: OnceLock<features::Registry> = OnceLock::new();
 
 pub fn feature_registry() -> &'static features::Registry {
-    FEATURE_REGISTRY.get_or_init(|| features::Registry::new(features::all()))
+    FEATURE_REGISTRY.get_or_init(|| {
+        let config = crate::config::get_config();
+        features::Registry::new(features::active_features(&config))
+    })
 }
 
 pub fn install() -> bool {
