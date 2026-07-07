@@ -133,6 +133,9 @@ game_functions! {
     PlayerPerspective => (
         "41 56 56 57 55 53 48 83 EC 20 41 89 D0 48 89 CE 80 3D ? ? ? ? 00 0F 85 ? ? ? ? 48 8B BE ? ? ? ? 48 85 FF 0F 84",
     ),
+    PlayerDiveMosaic => (
+        "41 57 41 56 56 57 53 48 81 EC ? ? ? ? 48 89 CE 80 3D ? ? ? ? ? 0F 85 ? ? ? ? 48 8B 86 ? ? ? ? 48 85 C0 0F 84 ? ? ? ? 8B 80 ? ? ? ? 48 83 F8",
+    ),
     FindString => (
         "56 48 83 ec 20 48 89 ce e8 ? ? ? ? 48 89 f1 89 c2 48 83 c4 20 5e e9 ? ? ? ? cc cc cc cc",
     ),

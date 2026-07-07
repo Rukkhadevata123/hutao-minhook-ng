@@ -23,6 +23,7 @@ pub struct Config {
     // Visuals
     pub enable_display_fog_override: bool,
     pub enable_perspective_override: bool,
+    pub enable_dive_mosaic_override: bool,
     pub hide_quest_banner: bool,
     pub hide_uid: bool,
     pub disable_event_camera_move: bool,
@@ -49,6 +50,7 @@ impl Default for Config {
             debug_mode: false,
             enable_display_fog_override: false,
             enable_perspective_override: false,
+            enable_dive_mosaic_override: false,
             hide_quest_banner: false,
             hide_uid: false,
             disable_event_camera_move: false,
@@ -368,6 +370,13 @@ pub fn load_config() {
         new_config.enable_perspective_override = GetPrivateProfileIntW(
             section_visuals.as_ptr(),
             to_wstring("RemoveBlur").as_ptr(),
+            0,
+            path_ptr,
+        ) != 0;
+
+        new_config.enable_dive_mosaic_override = GetPrivateProfileIntW(
+            section_visuals.as_ptr(),
+            to_wstring("RemoveDiveMosaic").as_ptr(),
             0,
             path_ptr,
         ) != 0;

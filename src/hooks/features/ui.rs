@@ -73,6 +73,15 @@ pub unsafe extern "system" fn hook_player_perspective(p_this: *mut c_void, displ
     let _ = unsafe { functions::original_player_perspective(p_this, display) };
 }
 
+pub unsafe extern "system" fn hook_player_dive_mosaic(p_this: *mut c_void, value: f32) {
+    let config = crate::config::get_config();
+    if config.enable_dive_mosaic_override {
+        return;
+    }
+
+    let _ = unsafe { functions::original_player_dive_mosaic(p_this, value) };
+}
+
 pub(crate) unsafe fn update_uid_visibility(ctx: &GameContext<'_>) -> bool {
     if ctx.config.hide_uid {
         unsafe { hide_path(UID_PATH) }

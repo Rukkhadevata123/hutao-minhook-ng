@@ -57,6 +57,7 @@ pub enum FeatureId {
     Uid,
     QuestBanner,
     Perspective,
+    DiveMosaic,
     TouchScreen,
     FrameRate,
     Fog,
@@ -197,7 +198,7 @@ pub struct GameContext<'a> {
     pub config: &'a Config,
 }
 
-static FEATURES: [Feature; 12] = [
+static FEATURES: [Feature; 13] = [
     // Always-on pump driver.
     Feature::new(
         FeatureId::PumpDriver,
@@ -262,6 +263,14 @@ static FEATURES: [Feature; 12] = [
         )],
         &[],
     ),
+    Feature::new(
+        FeatureId::DiveMosaic,
+        &[Hook::new(
+            PlayerDiveMosaic,
+            ui::hook_player_dive_mosaic as *mut c_void,
+        )],
+        &[],
+    ),
     Feature::with_update(
         FeatureId::TouchScreen,
         &[],
@@ -310,6 +319,7 @@ fn feature_enabled(id: FeatureId, config: &Config) -> bool {
         FeatureId::Uid => config.hide_uid,
         FeatureId::QuestBanner => config.hide_quest_banner,
         FeatureId::Perspective => config.enable_perspective_override,
+        FeatureId::DiveMosaic => config.enable_dive_mosaic_override,
         FeatureId::TouchScreen => config.use_touch_screen,
         FeatureId::FrameRate => config.enable_fps_override,
         FeatureId::Fog => config.enable_display_fog_override,
