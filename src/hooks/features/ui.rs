@@ -2,7 +2,7 @@ use crate::{
     game::{functions, il2cpp::Il2CppString},
     hooks::{commands::Command, features::GameContext},
 };
-use std::{ffi::c_void, ptr};
+use std::ffi::c_void;
 
 const UID_PATH: &[u8] = b"/BetaWatermarkCanvas(Clone)/Panel/TxtUID\0";
 
@@ -64,17 +64,13 @@ pub unsafe extern "system" fn hook_show_damage_text(
     };
 }
 
-pub unsafe extern "system" fn hook_player_perspective(
-    rcx: *mut c_void,
-    mut display: f32,
-    r8: *mut c_void,
-) -> *mut c_void {
+pub unsafe extern "system" fn hook_player_perspective(p_this: *mut c_void, display: bool) {
     let config = crate::config::get_config();
     if config.enable_perspective_override {
-        display = 1.0;
+        return;
     }
 
-    unsafe { functions::original_player_perspective(rcx, display, r8) }.unwrap_or(ptr::null_mut())
+    let _ = unsafe { functions::original_player_perspective(p_this, display) };
 }
 
 pub(crate) unsafe fn update_uid_visibility(ctx: &GameContext<'_>) -> bool {

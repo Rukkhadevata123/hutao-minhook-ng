@@ -77,18 +77,15 @@ pub unsafe fn switch_to_touch_screen() -> bool {
     .is_ok()
 }
 
-pub unsafe fn original_player_perspective(
-    rcx: *mut c_void,
-    display: f32,
-    r8: *mut c_void,
-) -> Option<*mut c_void> {
+pub unsafe fn original_player_perspective(p_this: *mut c_void, display: bool) -> bool {
     let ptr = state::original(GameFunction::PlayerPerspective);
     if ptr.is_null() {
-        return None;
+        return false;
     }
 
     let original: PlayerPerspectiveFn = unsafe { std::mem::transmute(ptr) };
-    Some(unsafe { original(rcx, display, r8) })
+    unsafe { original(p_this, display) };
+    true
 }
 
 pub unsafe fn original_setup_quest_banner(p_this: *mut c_void) -> bool {
