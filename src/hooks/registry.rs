@@ -1,6 +1,6 @@
 use crate::{
     hooks::{
-        features, signatures,
+        features, probes, signatures,
         state::{self, HookBindings},
     },
     logger,
@@ -53,11 +53,25 @@ pub fn install() -> bool {
     logger::debug!("install: minhook initialize ok");
 
     let registry = feature_registry();
-    let requirements = registry.requirements();
+    let config = crate::config::get_config();
+    let probes_enabled = probes::enabled(&config);
+    let mut requirements = registry.requirements();
+    if probes_enabled {
+        for function in probes::requirements() {
+            if !requirements.contains(&function) {
+                requirements.push(function);
+            }
+        }
+    }
     logger::debug!(
-        "install: requirements={} features={}",
+        "install: requirements={} features={} probes={}",
         requirements.len(),
-        registry.features().len()
+        registry.features().len(),
+        if probes_enabled {
+            probes::HOOKS.len()
+        } else {
+            0
+        }
     );
     let addresses = signatures::resolve_all(&requirements);
     if logger::enabled() {
@@ -115,6 +129,48 @@ pub fn install() -> bool {
                         hook.function,
                         function,
                         hook.detour.as_ptr()
+                    );
+                }
+            }
+        }
+    }
+
+    if probes_enabled {
+        for probe in probes::HOOKS {
+            if registry.inventory().iter().any(|entry| {
+                entry.kind == features::RequirementKind::Hook && entry.function == probe.function
+            }) {
+                continue;
+            }
+            let Some(function) = addresses.get(probe.function) else {
+                logger::debug!(
+                    "probe-hook: name={} function={:?} missing-target skip",
+                    probe.name,
+                    probe.function
+                );
+                continue;
+            };
+
+            match create_hook(function, probe.detour) {
+                Ok(trampoline) => {
+                    logger::debug!(
+                        "probe-hook: name={} function={:?} target={:p} target_rva=0x{:x} detour={:p} trampoline={:p} ok",
+                        probe.name,
+                        probe.function,
+                        function,
+                        main_module_rva(function),
+                        probe.detour,
+                        trampoline
+                    );
+                    bindings.set_original(probe.function, trampoline);
+                }
+                Err(_) => {
+                    logger::debug!(
+                        "probe-hook: name={} function={:?} target={:p} detour={:p} create-fail",
+                        probe.name,
+                        probe.function,
+                        function,
+                        probe.detour
                     );
                 }
             }

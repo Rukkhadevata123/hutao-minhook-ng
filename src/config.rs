@@ -19,6 +19,7 @@ pub struct Config {
     pub use_touch_screen: bool,
     pub disable_hot_reload: bool,
     pub debug_mode: bool,
+    pub probe_mode: bool,
 
     // Visuals
     pub enable_display_fog_override: bool,
@@ -48,6 +49,7 @@ impl Default for Config {
             use_touch_screen: false,
             disable_hot_reload: false,
             debug_mode: false,
+            probe_mode: false,
             enable_display_fog_override: false,
             enable_perspective_override: false,
             enable_dive_mosaic_override: false,
@@ -340,6 +342,13 @@ pub fn load_config() {
         new_config.debug_mode = GetPrivateProfileIntW(
             section_settings.as_ptr(),
             to_wstring("DebugMode").as_ptr(),
+            0,
+            path_ptr,
+        ) != 0;
+
+        new_config.probe_mode = GetPrivateProfileIntW(
+            section_settings.as_ptr(),
+            to_wstring("ProbeMode").as_ptr(),
             0,
             path_ptr,
         ) != 0;

@@ -1,6 +1,7 @@
 mod features;
 
 pub mod commands;
+pub mod probes;
 pub mod pump;
 pub mod registry;
 pub mod signatures;
