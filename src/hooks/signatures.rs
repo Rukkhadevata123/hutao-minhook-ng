@@ -136,6 +136,9 @@ game_functions! {
     PlayerDiveMosaic => (
         "41 57 41 56 56 57 53 48 81 EC ? ? ? ? 48 89 CE 80 3D ? ? ? ? ? 0F 85 ? ? ? ? 48 8B 86 ? ? ? ? 48 85 C0 0F 84 ? ? ? ? 8B 80 ? ? ? ? 48 83 F8",
     ),
+    DisplayEffect => (
+        "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 0F 29 B4 24 ? ? ? ? 4C 89 CF 48 89 D6 49 89 CC 48 8B AC 24",
+    ),
     FindString => (
         "56 48 83 ec 20 48 89 ce e8 ? ? ? ? 48 89 f1 89 c2 48 83 c4 20 5e e9 ? ? ? ? cc cc cc cc",
     ),

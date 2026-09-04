@@ -2,9 +2,8 @@ use crate::game::{
     abi::{
         CameraBrainFlushFn, ChangeFovFn, CheckCanEnterFn, CheckCanOpenMapFn, CraftEntryFn,
         CraftEntryPartnerFn, DisplayFogFn, EventCameraMoveFn, FindGameObjectFn, FindStringFn,
-        GetFrameCountFn, OpenTeamFn, OpenTeamPageAccordinglyFn, PlayerDiveMosaicFn,
-        PlayerPerspectiveFn, SetActiveFn, SetFrameCountFn, SetupQuestBannerFn, ShowDamageTextFn,
-        SwitchInputDeviceToTouchScreenFn,
+        GetFrameCountFn, OpenTeamFn, OpenTeamPageAccordinglyFn, PlayerPerspectiveFn, SetActiveFn,
+        SetFrameCountFn, SetupQuestBannerFn, ShowDamageTextFn, SwitchInputDeviceToTouchScreenFn,
     },
     il2cpp::Il2CppString,
 };
@@ -86,17 +85,6 @@ pub unsafe fn original_player_perspective(p_this: *mut c_void, display: bool) ->
 
     let original: PlayerPerspectiveFn = unsafe { std::mem::transmute(ptr) };
     unsafe { original(p_this, display) };
-    true
-}
-
-pub unsafe fn original_player_dive_mosaic(p_this: *mut c_void, value: f32) -> bool {
-    let ptr = state::original(GameFunction::PlayerDiveMosaic);
-    if ptr.is_null() {
-        return false;
-    }
-
-    let original: PlayerDiveMosaicFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { original(p_this, value) };
     true
 }
 

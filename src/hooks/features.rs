@@ -1,5 +1,6 @@
 pub(crate) mod actions;
 pub(crate) mod display;
+pub(crate) mod dive_mosaic;
 pub(crate) mod ui;
 
 use crate::{
@@ -263,13 +264,11 @@ static FEATURES: [Feature; 13] = [
         )],
         &[],
     ),
-    Feature::new(
+    Feature::with_update(
         FeatureId::DiveMosaic,
-        &[Hook::new(
-            PlayerDiveMosaic,
-            ui::hook_player_dive_mosaic as *mut c_void,
-        )],
         &[],
+        &[PlayerDiveMosaic, DisplayEffect],
+        dive_mosaic::update_dive_mosaic,
     ),
     Feature::with_update(
         FeatureId::TouchScreen,

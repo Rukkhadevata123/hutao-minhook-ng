@@ -23,7 +23,6 @@ pub type ShowDamageTextFn = unsafe extern "system" fn(
 );
 pub type DisplayFogFn = unsafe extern "system" fn(bool);
 pub type PlayerPerspectiveFn = unsafe extern "system" fn(*mut c_void, bool);
-pub type PlayerDiveMosaicFn = unsafe extern "system" fn(*mut c_void, f32);
 pub type FindStringFn = unsafe extern "system" fn(*const c_char) -> *mut Il2CppString;
 pub type CraftEntryFn = unsafe extern "system" fn(*mut c_void);
 pub type CraftEntryPartnerFn = unsafe extern "system" fn(
