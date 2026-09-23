@@ -1,5 +1,6 @@
 mod config;
 mod game;
+mod hdr;
 mod hooks;
 mod hutao_seh;
 mod logger;

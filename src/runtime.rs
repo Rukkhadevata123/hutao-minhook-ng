@@ -1,5 +1,6 @@
 use crate::{
     config::{get_config, load_config, setup_config_path},
+    hdr,
     hooks::{
         self,
         commands::{self, Command},
@@ -38,6 +39,15 @@ pub unsafe extern "system" fn run(h_module: *mut c_void) -> u32 {
         logger::setup_path(h_module as HMODULE);
         load_config();
         logger::start_session();
+
+        if get_config().enable_hdr {
+            match hdr::enable() {
+                Ok(()) => logger::debug!("hdr: registry value enabled"),
+                Err(error) => logger::write(format_args!(
+                    "hdr: failed to set registry value (Windows error {error})"
+                )),
+            }
+        }
 
         if !hooks::install() {
             return 0;

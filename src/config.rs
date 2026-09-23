@@ -16,6 +16,7 @@ pub struct Config {
     pub selected_fps: i32,
     pub enable_fov_override: bool,
     pub fov_value: f32,
+    pub enable_hdr: bool,
     pub use_touch_screen: bool,
     pub disable_hot_reload: bool,
     pub debug_mode: bool,
@@ -46,6 +47,7 @@ impl Default for Config {
             selected_fps: 60,
             enable_fov_override: false,
             fov_value: 60.0,
+            enable_hdr: false,
             use_touch_screen: false,
             disable_hot_reload: false,
             debug_mode: false,
@@ -321,6 +323,13 @@ pub fn load_config() {
         new_config.enable_fov_override = GetPrivateProfileIntW(
             section_settings.as_ptr(),
             to_wstring("EnableFOVModify").as_ptr(),
+            0,
+            path_ptr,
+        ) != 0;
+
+        new_config.enable_hdr = GetPrivateProfileIntW(
+            section_settings.as_ptr(),
+            to_wstring("EnableHDR").as_ptr(),
             0,
             path_ptr,
         ) != 0;
