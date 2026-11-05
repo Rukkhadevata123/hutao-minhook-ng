@@ -13,43 +13,15 @@ use crate::logger;
 use std::ffi::{c_char, c_void};
 use std::ptr;
 
-unsafe fn logged<F>(name: &str, f: F) -> bool
-where
-    F: FnMut(),
-{
-    match try_seh(f) {
-        Ok(()) => true,
-        Err(e) => {
-            logger::debug!("{name}: game call faulted exception={e:#x}");
-            false
-        }
-    }
+fn logged<R>(name: &str, f: impl FnMut() -> R) -> Option<R> {
+    try_seh(f)
+        .inspect_err(|code| {
+            logger::debug!("{name}: game call faulted exception={code:#x}");
+        })
+        .ok()
 }
 
-unsafe fn logged_val<F, R>(name: &str, f: F) -> Option<R>
-where
-    F: FnMut() -> R,
-{
-    match try_seh(f) {
-        Ok(v) => Some(v),
-        Err(e) => {
-            logger::debug!("{name}: game call faulted exception={e:#x}");
-            None
-        }
-    }
-}
-
-unsafe fn silent<F>(f: F) -> bool
-where
-    F: FnMut(),
-{
-    try_seh(f).is_ok()
-}
-
-unsafe fn silent_val<F, R>(f: F) -> Option<R>
-where
-    F: FnMut() -> R,
-{
+fn silent<R>(f: impl FnMut() -> R) -> Option<R> {
     try_seh(f).ok()
 }
 
@@ -59,7 +31,7 @@ pub unsafe fn original_frame_count() -> Option<i32> {
         return None;
     }
     let original: GetFrameCountFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { silent_val(move || original()) }
+    silent(|| unsafe { original() })
 }
 
 pub unsafe fn set_frame_count(value: i32) -> bool {
@@ -68,11 +40,7 @@ pub unsafe fn set_frame_count(value: i32) -> bool {
         return false;
     }
     let f: SetFrameCountFn = unsafe { std::mem::transmute(ptr) };
-    unsafe {
-        silent(move || {
-            f(value);
-        })
-    }
+    silent(|| unsafe { f(value) }).is_some()
 }
 
 pub unsafe fn original_change_fov(a1: *mut c_void, value: f32) -> Option<i32> {
@@ -81,7 +49,7 @@ pub unsafe fn original_change_fov(a1: *mut c_void, value: f32) -> Option<i32> {
         return None;
     }
     let original: ChangeFovFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { silent_val(move || original(a1, value)) }
+    silent(|| unsafe { original(a1, value) })
 }
 
 pub unsafe fn original_camera_brain_flush(a1: *mut c_void) -> Option<i64> {
@@ -90,7 +58,7 @@ pub unsafe fn original_camera_brain_flush(a1: *mut c_void) -> Option<i64> {
         return None;
     }
     let original: CameraBrainFlushFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { silent_val(move || original(a1)) }
+    silent(|| unsafe { original(a1) })
 }
 
 pub unsafe fn set_fog_visible(visible: bool) -> bool {
@@ -99,7 +67,7 @@ pub unsafe fn set_fog_visible(visible: bool) -> bool {
         return false;
     }
     let display_fog: DisplayFogFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { silent(move || display_fog(visible)) }
+    silent(|| unsafe { display_fog(visible) }).is_some()
 }
 
 pub unsafe fn switch_to_touch_screen() -> bool {
@@ -108,11 +76,10 @@ pub unsafe fn switch_to_touch_screen() -> bool {
         return false;
     }
     let switch_input: SwitchInputDeviceToTouchScreenFn = unsafe { std::mem::transmute(ptr) };
-    unsafe {
-        logged("switch_to_touch_screen", move || {
-            switch_input(ptr::null_mut())
-        })
-    }
+    logged("switch_to_touch_screen", || unsafe {
+        switch_input(ptr::null_mut())
+    })
+    .is_some()
 }
 
 pub unsafe fn original_player_perspective(p_this: *mut c_void, display: bool) -> bool {
@@ -121,7 +88,7 @@ pub unsafe fn original_player_perspective(p_this: *mut c_void, display: bool) ->
         return false;
     }
     let original: PlayerPerspectiveFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { silent(move || original(p_this, display)) }
+    silent(|| unsafe { original(p_this, display) }).is_some()
 }
 
 pub unsafe fn original_setup_quest_banner(p_this: *mut c_void) -> bool {
@@ -130,7 +97,7 @@ pub unsafe fn original_setup_quest_banner(p_this: *mut c_void) -> bool {
         return false;
     }
     let original: SetupQuestBannerFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { silent(move || original(p_this)) }
+    silent(|| unsafe { original(p_this) }).is_some()
 }
 
 pub unsafe fn original_event_camera_move(p_this: *mut c_void, event: *mut c_void) -> Option<bool> {
@@ -139,7 +106,7 @@ pub unsafe fn original_event_camera_move(p_this: *mut c_void, event: *mut c_void
         return None;
     }
     let original: EventCameraMoveFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { silent_val(move || original(p_this, event)) }
+    silent(|| unsafe { original(p_this, event) })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -159,21 +126,20 @@ pub unsafe fn original_show_damage_text(
         return false;
     }
     let original: ShowDamageTextFn = unsafe { std::mem::transmute(ptr) };
-    unsafe {
-        silent(move || {
-            original(
-                p_this,
-                type_,
-                damage_type,
-                show_type,
-                damage,
-                show_text,
-                world_pos,
-                attackee,
-                element_reaction_type,
-            )
-        })
-    }
+    silent(|| unsafe {
+        original(
+            p_this,
+            type_,
+            damage_type,
+            show_type,
+            damage,
+            show_text,
+            world_pos,
+            attackee,
+            element_reaction_type,
+        )
+    })
+    .is_some()
 }
 
 pub unsafe fn original_craft_entry(p_this: *mut c_void) -> bool {
@@ -182,7 +148,7 @@ pub unsafe fn original_craft_entry(p_this: *mut c_void) -> bool {
         return false;
     }
     let original: CraftEntryFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { logged("original_craft_entry", move || original(p_this)) }
+    logged("original_craft_entry", || unsafe { original(p_this) }).is_some()
 }
 
 pub unsafe fn original_check_can_open_map(p_this: *mut c_void) -> Option<bool> {
@@ -191,7 +157,7 @@ pub unsafe fn original_check_can_open_map(p_this: *mut c_void) -> Option<bool> {
         return None;
     }
     let original: CheckCanOpenMapFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { silent_val(move || original(p_this)) }
+    silent(|| unsafe { original(p_this) })
 }
 
 pub unsafe fn original_open_team() -> bool {
@@ -200,7 +166,7 @@ pub unsafe fn original_open_team() -> bool {
         return false;
     }
     let original: OpenTeamFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { logged("original_open_team", move || original()) }
+    logged("original_open_team", || unsafe { original() }).is_some()
 }
 
 pub unsafe fn open_synthesis_page() -> bool {
@@ -212,17 +178,16 @@ pub unsafe fn open_synthesis_page() -> bool {
         return false;
     };
     let craft_entry_partner: CraftEntryPartnerFn = unsafe { std::mem::transmute(partner_ptr) };
-    unsafe {
-        logged("open_synthesis_page", move || {
-            craft_entry_partner(
-                page,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-            );
-        })
-    }
+    logged("open_synthesis_page", || unsafe {
+        craft_entry_partner(
+            page,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+        );
+    })
+    .is_some()
 }
 
 pub unsafe fn can_enter() -> Option<bool> {
@@ -231,7 +196,7 @@ pub unsafe fn can_enter() -> Option<bool> {
         return None;
     }
     let check_can_enter: CheckCanEnterFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { logged_val("can_enter", move || check_can_enter()) }
+    logged("can_enter", || unsafe { check_can_enter() })
 }
 
 pub unsafe fn open_team_page_accordingly(animated: bool) -> bool {
@@ -240,11 +205,7 @@ pub unsafe fn open_team_page_accordingly(animated: bool) -> bool {
         return false;
     }
     let f: OpenTeamPageAccordinglyFn = unsafe { std::mem::transmute(ptr) };
-    unsafe {
-        logged("open_team_page_accordingly", move || {
-            f(animated);
-        })
-    }
+    logged("open_team_page_accordingly", || unsafe { f(animated) }).is_some()
 }
 
 pub(crate) unsafe fn find_string(value: &[u8]) -> Option<*mut Il2CppString> {
@@ -253,8 +214,7 @@ pub(crate) unsafe fn find_string(value: &[u8]) -> Option<*mut Il2CppString> {
         return None;
     }
     let f: FindStringFn = unsafe { std::mem::transmute(ptr) };
-    let string = unsafe { silent_val(move || f(value.as_ptr() as *const c_char)) };
-    string.and_then(|s| (!s.is_null()).then_some(s))
+    silent(|| unsafe { f(value.as_ptr() as *const c_char) }).filter(|string| !string.is_null())
 }
 
 pub(crate) unsafe fn find_game_object(value: *mut Il2CppString) -> Option<*mut c_void> {
@@ -263,8 +223,7 @@ pub(crate) unsafe fn find_game_object(value: *mut Il2CppString) -> Option<*mut c
         return None;
     }
     let f: FindGameObjectFn = unsafe { std::mem::transmute(ptr) };
-    let object = unsafe { silent_val(move || f(value)) };
-    object.and_then(|o| (!o.is_null()).then_some(o))
+    silent(|| unsafe { f(value) }).filter(|object| !object.is_null())
 }
 
 pub(crate) unsafe fn set_active(object: *mut c_void, active: bool) -> bool {
@@ -273,7 +232,7 @@ pub(crate) unsafe fn set_active(object: *mut c_void, active: bool) -> bool {
         return false;
     }
     let f: SetActiveFn = unsafe { std::mem::transmute(ptr) };
-    unsafe { silent(move || f(object, active)) }
+    silent(|| unsafe { f(object, active) }).is_some()
 }
 
 pub(crate) fn has_unity_object_helpers() -> bool {
