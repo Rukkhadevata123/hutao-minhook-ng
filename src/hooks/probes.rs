@@ -12,7 +12,7 @@ unsafe impl Sync for ProbeHook {}
 pub const HOOKS: &[ProbeHook] = &[];
 
 pub fn enabled(config: &crate::config::Config) -> bool {
-    config.debug_mode && config.probe_mode
+    config.debug_mode && !HOOKS.is_empty()
 }
 
 pub fn requirements() -> impl Iterator<Item = GameFunction> + 'static {
@@ -25,7 +25,7 @@ mod tests {
     use crate::config::Config;
 
     #[test]
-    fn probe_framework_is_empty_by_default() {
+    fn probe_framework_stays_disabled_without_hooks() {
         assert!(HOOKS.is_empty());
         assert_eq!(requirements().count(), 0);
 
@@ -34,8 +34,5 @@ mod tests {
 
         config.debug_mode = true;
         assert!(!enabled(&config));
-
-        config.probe_mode = true;
-        assert!(enabled(&config));
     }
 }
