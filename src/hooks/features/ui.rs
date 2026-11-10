@@ -43,6 +43,8 @@ pub unsafe extern "system" fn hook_show_damage_text(
     world_pos: *mut c_void,
     attackee: *mut c_void,
     element_reaction_type: i32,
+    extra_bool: bool,
+    extra_float: f32,
 ) {
     let config = crate::config::get_config();
     if config.disable_show_damage_text {
@@ -60,6 +62,8 @@ pub unsafe extern "system" fn hook_show_damage_text(
             world_pos,
             attackee,
             element_reaction_type,
+            extra_bool,
+            extra_float,
         )
     };
 }

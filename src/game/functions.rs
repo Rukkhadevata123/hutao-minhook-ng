@@ -120,6 +120,8 @@ pub unsafe fn original_show_damage_text(
     world_pos: *mut c_void,
     attackee: *mut c_void,
     element_reaction_type: i32,
+    extra_bool: bool,
+    extra_float: f32,
 ) -> bool {
     let ptr = state::original(GameFunction::ShowDamageText);
     if ptr.is_null() {
@@ -137,6 +139,8 @@ pub unsafe fn original_show_damage_text(
             world_pos,
             attackee,
             element_reaction_type,
+            extra_bool,
+            extra_float,
         )
     })
     .is_some()

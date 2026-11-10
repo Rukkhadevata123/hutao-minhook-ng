@@ -20,6 +20,8 @@ pub type ShowDamageTextFn = unsafe extern "system" fn(
     *mut c_void,
     *mut c_void,
     i32,
+    bool,
+    f32,
 );
 pub type DisplayFogFn = unsafe extern "system" fn(bool);
 pub type PlayerPerspectiveFn = unsafe extern "system" fn(*mut c_void, bool);
